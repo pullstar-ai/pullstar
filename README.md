@@ -1,8 +1,17 @@
 # PullStar 1-on-1
 
-> Generate a ready-to-use 1-on-1 brief for any engineer on your team — from their GitHub activity, in seconds.
+ Generate a ready-to-use 1-on-1 brief for any engineer on your team — from their GitHub activity, in seconds.
+ Spots patterns like:
+- High output but low review participation
+- Large PR sizes suggesting batching
+- Cross-repo collaboration signals
+> 
+![PullStar Screenshot](./assets/screenshot1.png)
 
+> Example 1-on-1 brief generated from real GitHub activity (20-day window)
+> 
 PullStar fetches GitHub activity for one engineer (PRs authored, reviews given), runs a deterministic scoring engine across five dimensions, and calls your configured AI provider to generate a structured 1-on-1 preparation brief. All data stays on your machine.
+
 
 ---
 
@@ -244,3 +253,19 @@ PullStar is designed to be local-first and explicit about data usage.
 - This data may be sent to the configured LLM provider or external agent
 
 - This mode is intended for richer insight and is explicitly opt-in.
+  
+  ## 🚀 PullStar Pro (Early Access)
+
+PullStar OSS focuses on private, local 1-on-1 prep.
+
+We’re exploring a Pro version with:
+- longitudinal insights across time
+- team-level patterns
+- coaching and pairing signals
+- integrations (Slack, calendar, etc.)
+
+If this is interesting, join the early access list via notion form:
+
+👉 https://savory-step-9d7.notion.site/32fc2b5d4feb8054b937f54c753ff73b?pvs=105
+
+We’re prioritizing feedback from engineering managers using the OSS version.
