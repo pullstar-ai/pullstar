@@ -53,7 +53,7 @@ PROVIDERS: dict[str, dict] = {
     "openai":      {"key_env": "OPENAI_API_KEY",       "base_url": None},
     "openrouter":  {"key_env": "OPENROUTER_API_KEY",   "base_url": "https://openrouter.ai/api/v1"},
     "together":    {"key_env": "TOGETHER_API_KEY",     "base_url": "https://api.together.xyz/v1"},
-    "huggingface": {"key_env": "HUGGINGFACE_API_KEY",  "base_url": "https://api-inference.huggingface.co/v1"},
+    "huggingface": {"key_env": "HUGGINGFACE_API_KEY",  "base_url": "https://router.huggingface.co/v1"},
 }
 
 
