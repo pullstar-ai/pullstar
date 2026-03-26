@@ -1,0 +1,6 @@
+{
+  "provider": "together",
+  "model": "zai-org/GLM-5",
+  "temperature": 0.8,
+  "max_tokens": 1200
+}

@@ -1,0 +1,35 @@
+# Environment — never commit secrets
+.env
+.env.local
+
+# Provider/model config — contains no secrets but is machine-local
+# Copy model_provider.json.example to model_provider.json to get started
+model_provider.json
+
+# Runtime output — engineer data must not be committed
+.pullstar/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+dist/
+*.egg-info/
+
+# Node / UI
+ui/node_modules/
+ui/dist/
+ui/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local config
+.claude/
+# docs
+oss packaging.md
+Plan.md
+PRD.md

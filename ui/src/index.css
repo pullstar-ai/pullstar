@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Brief content — styles for react-markdown output inside .brief-content
+   Renders as a briefing document: clear section hierarchy, readable type.
+   --------------------------------------------------------------------------- */
+
+.brief-content h2 {
+  @apply text-sm font-semibold uppercase tracking-wide text-gray-400 mt-8 mb-3 pb-2 border-b border-gray-100;
+}
+
+.brief-content > h2:first-child {
+  @apply mt-0;
+}
+
+.brief-content p {
+  @apply text-sm text-gray-700 leading-relaxed mb-3;
+}
+
+.brief-content ul {
+  @apply list-disc list-outside pl-5 mb-4 space-y-1.5;
+}
+
+.brief-content li {
+  @apply text-sm text-gray-700 leading-relaxed;
+}
+
+.brief-content li p {
+  @apply mb-0;
+}
+
+.brief-content blockquote {
+  @apply border-l-4 border-amber-300 pl-4 py-1 text-xs text-amber-700 bg-amber-50 rounded-r mb-3;
+}
+
+.brief-content blockquote p {
+  @apply mb-0 text-xs text-amber-700;
+}
+
+.brief-content strong {
+  @apply font-semibold text-gray-800;
+}
+
+/* Score Summary table */
+.brief-content table {
+  @apply w-full text-sm border-collapse mb-4 mt-1;
+}
+
+.brief-content thead tr {
+  @apply border-b-2 border-gray-200;
+}
+
+.brief-content th {
+  @apply text-left text-xs font-semibold text-gray-500 pb-2 pr-4;
+}
+
+.brief-content tbody tr {
+  @apply border-b border-gray-100 last:border-0;
+}
+
+.brief-content td {
+  @apply text-sm text-gray-700 py-2 pr-4;
+}
+
+.brief-content tbody tr:nth-child(even) td {
+  @apply bg-gray-50/60;
+}
