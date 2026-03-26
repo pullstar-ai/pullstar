@@ -1,6 +1,6 @@
 {
-  "provider": "together",
+  "provider": "huggingface",
   "model": "zai-org/GLM-5",
-  "temperature": 0.8,
-  "max_tokens": 1200
+  "temperature": 0.2,
+  "max_tokens": 1500
 }
