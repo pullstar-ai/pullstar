@@ -44,16 +44,16 @@ DEFAULT_PROVIDER_CONFIG = Path(__file__).parent.parent / "model_provider.json"
 
 # ---------------------------------------------------------------------------
 # Provider registry
-# Maps provider name → API key env var + base URL.
-# Model name comes from model_provider.json — no defaults here.
+# Maps provider name → API key env var only.
+# base_url comes from model_provider.json — no defaults here.
 # ---------------------------------------------------------------------------
 
 PROVIDERS: dict[str, dict] = {
-    "anthropic":   {"key_env": "ANTHROPIC_API_KEY",   "base_url": None},
-    "openai":      {"key_env": "OPENAI_API_KEY",       "base_url": None},
-    "openrouter":  {"key_env": "OPENROUTER_API_KEY",   "base_url": "https://openrouter.ai/api/v1"},
-    "together":    {"key_env": "TOGETHER_API_KEY",     "base_url": "https://api.together.xyz/v1"},
-    "huggingface": {"key_env": "HUGGINGFACE_API_KEY",  "base_url": "https://router.huggingface.co/v1"},
+    "anthropic":   {"key_env": "ANTHROPIC_API_KEY"},
+    "openai":      {"key_env": "OPENAI_API_KEY"},
+    "openrouter":  {"key_env": "OPENROUTER_API_KEY"},
+    "together":    {"key_env": "TOGETHER_API_KEY"},
+    "huggingface": {"key_env": "HUGGINGFACE_API_KEY"},
 }
 
 
@@ -623,6 +623,7 @@ def main() -> None:
     provider: str | None = None
     model:    str | None = None
     api_key:  str | None = None
+    base_url: str | None = None
     temperature = 0.7
     max_tokens  = 2048
 
@@ -634,8 +635,9 @@ def main() -> None:
         temperature  = provider_cfg.get("temperature", 0.7)
         max_tokens   = int(provider_cfg.get("max_tokens", 2048))
 
-        key_env = PROVIDERS[provider]["key_env"]
-        api_key = os.getenv(key_env, "").strip()
+        base_url    = provider_cfg.get("base_url") or None
+        key_env     = PROVIDERS[provider]["key_env"]
+        api_key     = os.getenv(key_env, "").strip()
         if not api_key:
             fail(
                 f"API key not found for provider '{provider}'.\n"
@@ -661,13 +663,12 @@ def main() -> None:
         print(f"  System: {len(system_msg)} chars  |  User: {len(user_msg)} chars")
         print(f"> Calling {provider}...")
 
-        cfg = PROVIDERS[provider]
         if provider == "anthropic":
             brief = call_anthropic(api_key, model, system_msg, user_msg,
                                    temperature=temperature, max_tokens=max_tokens)
         else:
             brief = call_openai_compatible(
-                api_key, model, cfg["base_url"],
+                api_key, model, base_url,
                 system_msg, user_msg, provider,
                 temperature=temperature, max_tokens=max_tokens,
             )

@@ -1,6 +1,7 @@
 {
   "provider": "huggingface",
   "model": "zai-org/GLM-5",
+  "base_url": "https://router.huggingface.co/v1",
   "temperature": 0.2,
   "max_tokens": 1500
 }
