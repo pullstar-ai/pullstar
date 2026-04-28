@@ -31,7 +31,7 @@ PullStar fetches GitHub activity for one engineer (PRs authored, reviews given),
 ```bash
 # 1. Clone
 git clone https://github.com/pullstar-ai/pullstar
-cd pullstar-1on1
+cd pullstar
 
 # 2. Bootstrap (creates .venv, installs deps, copies config stubs)
 ./scripts/install.sh
