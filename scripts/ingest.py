@@ -28,13 +28,63 @@ from github import Github, GithubException, RateLimitExceededException
 # Load .env from repo root regardless of where the script is invoked from
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+# ---------------------------------------------------------------------------
+# Secret resolution and log scrubbing
+# ---------------------------------------------------------------------------
+
+_CENTRAL_CREDS_FILE = Path.home() / ".pullstar" / "credentials"
+_PROJECT_ENV_FILE   = Path(__file__).parent.parent / ".env"
+
+# Secret values registered here are scrubbed from all log/error output.
+_registered_secrets: set[str] = set()
+
+
+def _register_secret(value: str) -> str:
+    """Mark a resolved secret value for log scrubbing. Returns the value unchanged."""
+    if value:
+        _registered_secrets.add(value)
+    return value
+
+
+def _scrub(text: str) -> str:
+    """Replace any registered secret value in text with ***."""
+    for secret in _registered_secrets:
+        if secret and secret in text:
+            text = text.replace(secret, "***")
+    return text
+
+
+def resolve_secret(name: str, cli_value: str | None = None) -> str | None:
+    """
+    Resolve a secret by name using a layered lookup:
+      1. cli_value  — CLI override (highest priority; for debug/testing only)
+      2. os.getenv  — environment variable (includes values loaded from .env)
+      3. ~/.pullstar/credentials — central credentials file (key=value format)
+      4. .env       — project-local .env re-read explicitly as final fallback
+
+    Registers the resolved value for automatic log scrubbing.
+    Returns None if not found in any source.
+    """
+    from dotenv import dotenv_values
+
+    value = (
+        (cli_value or "").strip()
+        or (os.getenv(name) or "").strip()
+        or (dotenv_values(_CENTRAL_CREDS_FILE).get(name) or "").strip()
+        or (dotenv_values(_PROJECT_ENV_FILE).get(name) or "").strip()
+        or None
+    )
+    if value:
+        _register_secret(value)
+    return value
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 def fail(msg: str) -> None:
-    print(f"Error: {msg}", file=sys.stderr)
+    print(f"Error: {_scrub(msg)}", file=sys.stderr)
     sys.exit(1)
 
 
@@ -179,6 +229,13 @@ def main() -> None:
     parser.add_argument("--days",        type=int, default=30, help="Lookback window in days (default: 30)")
     parser.add_argument("--output-dir",  default=".pullstar", help="Output directory (default: .pullstar)")
     parser.add_argument(
+        "--github-token",
+        default=None,
+        metavar="TOKEN",
+        help="[Override/debug only] GitHub PAT. Prefer GITHUB_TOKEN in .env or "
+             "~/.pullstar/credentials. Never logged.",
+    )
+    parser.add_argument(
         "--pr_insights",
         action="store_true",
         default=False,
@@ -190,14 +247,15 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # -- Environment ---------------------------------------------------------
-    token = os.getenv("GITHUB_TOKEN")
+    # -- Credential resolution -----------------------------------------------
+    token = resolve_secret("GITHUB_TOKEN", cli_value=args.github_token)
     if not token:
-        fail(
-            "GITHUB_TOKEN is not set.\n"
-            "  Create a personal access token at: https://github.com/settings/tokens\n"
-            "  Required scopes: repo (or read:org + repo for org-scoped search)\n"
-            "  Then add it to your .env file:  GITHUB_TOKEN=ghp_..."
+        print(
+            "> Warning: GITHUB_TOKEN not found in any credential source — "
+            "using unauthenticated GitHub API access.\n"
+            "  Rate limit: 60 req/hr. Set GITHUB_TOKEN in .env or "
+            "~/.pullstar/credentials for higher limits.",
+            file=sys.stderr,
         )
     org_name = os.getenv("GITHUB_ORG", "").strip()
     login    = args.login.strip()
@@ -210,7 +268,7 @@ def main() -> None:
     since_iso  = since_dt.strftime("%Y-%m-%d")
     total_weeks = math.ceil(days / 7)
 
-    g = Github(token)
+    g = Github(token) if token else Github()
 
     # -- Look up engineer display name (best-effort) -------------------------
     engineer_name: str | None = None
@@ -239,7 +297,7 @@ def main() -> None:
                 repo = g.get_repo(issue.repository.full_name)
                 pr   = repo.get_pull(issue.number)
             except GithubException as exc:
-                print(f"  warning: skipped PR #{issue.number} — {exc}", file=sys.stderr)
+                print(f"  warning: skipped PR #{issue.number} — {_scrub(str(exc))}", file=sys.stderr)
                 continue
 
             if pr.merged:
@@ -317,7 +375,7 @@ def main() -> None:
                         "body_length":  len(review.body or ""),
                     })
             except GithubException as exc:
-                print(f"  warning: skipped review PR #{issue.number} — {exc}", file=sys.stderr)
+                print(f"  warning: skipped review PR #{issue.number} — {_scrub(str(exc))}", file=sys.stderr)
                 continue
 
     except RateLimitExceededException:
