@@ -19,9 +19,10 @@ PullStar fetches GitHub activity for one engineer (PRs authored, reviews given),
 
 - Python 3.11+
 - Node.js 18+ (UI only)
-- A GitHub **classic** personal access token with `repo` scope
+- A GitHub **classic** personal access token with `repo` scope (recommended)
   - Create one at: <https://github.com/settings/tokens>
   - Fine-grained PATs do not support cross-user search — use a classic PAT
+  - Unauthenticated access works but is rate-limited to 60 req/hr
 - An AI provider key (required for `--mode local`; not needed for `--mode stub`)
 
 ---
@@ -59,7 +60,7 @@ cp model_provider.json.example model_provider.json
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | Yes | Classic PAT with `repo` scope |
+| `GITHUB_TOKEN` | Recommended | Classic PAT with `repo` scope. Omit to use unauthenticated access (60 req/hr). |
 | `GITHUB_ORG` | No | Scope ingestion to one org. Omit to search all accessible repos. |
 | `ANTHROPIC_API_KEY` | If using anthropic | Anthropic API key |
 | `OPENAI_API_KEY` | If using openai | OpenAI API key |
@@ -68,6 +69,17 @@ cp model_provider.json.example model_provider.json
 | `HUGGINGFACE_API_KEY` | If using huggingface | HuggingFace API key |
 
 Provider/model settings do **not** belong in `.env`. Use `model_provider.json` for those.
+
+#### Credential lookup order
+
+`GITHUB_TOKEN` is resolved in this order — first match wins:
+
+1. `--github-token` CLI flag (override/debug only — never logged)
+2. `GITHUB_TOKEN` environment variable
+   - If a `.env` file exists in the repo root, it is loaded first, so `GITHUB_TOKEN` from `.env` is included in this step
+3. `~/.pullstar/credentials` (central credentials file, `KEY=value` format)
+
+For normal use, `.env` or `~/.pullstar/credentials` is recommended. If both are present, `.env` takes precedence because it is loaded into the environment-variable step before `~/.pullstar/credentials` is checked. The CLI flag is intended for one-off testing only.
 
 ### Provider/model config — `model_provider.json`
 
@@ -111,6 +123,13 @@ Or step by step:
 python scripts/ingest.py --login jsmith
 python scripts/score.py --login jsmith
 python scripts/generate_brief.py --login jsmith --mode local
+```
+
+`ingest.py` optional flags:
+
+```bash
+python scripts/ingest.py --login jsmith --days 14         # narrower window (default: 30)
+python scripts/ingest.py --login jsmith --max-results 20  # faster on high-activity users (default: 50)
 ```
 
 Requires: `model_provider.json` + matching API key in `.env`
@@ -233,7 +252,7 @@ Run `ingest.py` with `--pr_insights` to collect review and comment detail per PR
 python scripts/ingest.py --login jsmith --pr_insights
 ```
 
-Adds ~3 API calls per PR (capped at 20 PRs). Safe to omit for faster ingestion.
+Adds ~3 API calls per PR (capped at 20 PRs). Search results are capped at 50 by default — use `--max-results` to adjust. Safe to omit for faster ingestion.
 
 ---
 
