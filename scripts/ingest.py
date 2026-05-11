@@ -22,8 +22,13 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import socket
+
 from dotenv import load_dotenv
 from github import Github, GithubException, RateLimitExceededException
+
+# Default socket timeout for all network operations (GitHub API calls)
+socket.setdefaulttimeout(60)  # 60 seconds per API call max
 
 # Load .env from repo root regardless of where the script is invoked from
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -129,6 +134,11 @@ _INSIGHTS_MAX_REVIEWS  = 10   # max review objects stored per PR
 _INSIGHTS_MAX_COMMENTS = 10   # max issue comment objects stored per PR
 _INSIGHTS_EXCERPT_LEN  = 600  # chars per body excerpt (reviews and comments)
 
+# Pagination limits to prevent runaway queries on high-activity users
+_MAX_SEARCH_RESULTS    = 50   # max total results to iterate from search API
+_MAX_REVIEWED_SEARCH   = 50   # max results for reviewed-by search
+_SEARCH_PAGE_SIZE      = 30   # fetch search results in smaller chunks
+
 
 def fetch_pr_details(pr_data: dict, g: Github) -> dict | None:
     """
@@ -229,6 +239,16 @@ def main() -> None:
     parser.add_argument("--days",        type=int, default=30, help="Lookback window in days (default: 30)")
     parser.add_argument("--output-dir",  default=".pullstar", help="Output directory (default: .pullstar)")
     parser.add_argument(
+        "--max-results",
+        type=int,
+        default=_MAX_SEARCH_RESULTS,
+        metavar="N",
+        help=(
+            f"Maximum search results to iterate (default: {_MAX_SEARCH_RESULTS}). "
+            "Lower for faster runs on high-activity users."
+        ),
+    )
+    parser.add_argument(
         "--github-token",
         default=None,
         metavar="TOKEN",
@@ -268,7 +288,8 @@ def main() -> None:
     since_iso  = since_dt.strftime("%Y-%m-%d")
     total_weeks = math.ceil(days / 7)
 
-    g = Github(token) if token else Github()
+    # Initialize GitHub client with explicit timeout for all API calls
+    g = Github(token, timeout=60) if token else Github(timeout=60)
 
     # -- Look up engineer display name (best-effort) -------------------------
     engineer_name: str | None = None
@@ -286,12 +307,15 @@ def main() -> None:
         pr_query += f" org:{org_name}"
 
     print(f"  query: {pr_query}")
+    print(f"  pagination: max {args.max_results} results, {_SEARCH_PAGE_SIZE} per page")
     prs_authored = []
     try:
         pr_results = g.search_issues(pr_query, sort="created", order="desc")
+        total_fetched = 0
         for issue in pr_results:
-            if len(prs_authored) >= 100:
-                print("  (capped at 100 PRs)")
+            total_fetched += 1
+            if total_fetched > args.max_results:
+                print(f"  (capped at {args.max_results} search results)")
                 break
             try:
                 repo = g.get_repo(issue.repository.full_name)
@@ -307,6 +331,8 @@ def main() -> None:
             else:
                 status = "open"
 
+            if len(prs_authored) > 0 and len(prs_authored) % 10 == 0:
+                print(f"  ... {len(prs_authored)} PRs fetched")
             prs_authored.append({
                 "number":               pr.number,
                 "title":                pr.title,
@@ -349,14 +375,16 @@ def main() -> None:
         review_query += f" org:{org_name}"
 
     print(f"  query: {review_query}")
+    print(f"  pagination: max {_MAX_REVIEWED_SEARCH} results")
     reviews_given = []
     try:
         reviewed_results = g.search_issues(review_query, sort="updated", order="desc")
-        prs_checked = 0
+        total_reviewed_fetched = 0
         for issue in reviewed_results:
-            if prs_checked >= 100 or len(reviews_given) >= 100:
+            total_reviewed_fetched += 1
+            if total_reviewed_fetched > _MAX_REVIEWED_SEARCH:
+                print(f"  (capped at {_MAX_REVIEWED_SEARCH} search results)")
                 break
-            prs_checked += 1
             try:
                 repo = g.get_repo(issue.repository.full_name)
                 pr   = repo.get_pull(issue.number)
