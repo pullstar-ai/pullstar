@@ -79,7 +79,7 @@ Provider/model settings do **not** belong in `.env`. Use `model_provider.json` f
    - If a `.env` file exists in the repo root, it is loaded first, so `GITHUB_TOKEN` from `.env` is included in this step
 3. `~/.pullstar/credentials` (central credentials file, `KEY=value` format)
 
-For normal use, `.env` or `~/.pullstar/credentials` is recommended. The CLI flag is intended for one-off testing only.
+For normal use, `.env` or `~/.pullstar/credentials` is recommended. If both are present, `.env` takes precedence because it is loaded into the environment-variable step before `~/.pullstar/credentials` is checked. The CLI flag is intended for one-off testing only.
 
 ### Provider/model config — `model_provider.json`
 
