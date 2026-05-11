@@ -379,15 +379,15 @@ def main() -> None:
         review_query += f" org:{org_name}"
 
     print(f"  query: {review_query}")
-    print(f"  pagination: max {_MAX_REVIEWED_SEARCH} results")
+    print(f"  pagination: max {args.max_results} results")
     reviews_given = []
     try:
         reviewed_results = g.search_issues(review_query, sort="updated", order="desc")
         total_reviewed_fetched = 0
         for issue in reviewed_results:
             total_reviewed_fetched += 1
-            if total_reviewed_fetched > _MAX_REVIEWED_SEARCH:
-                print(f"  (capped at {_MAX_REVIEWED_SEARCH} search results)")
+            if total_reviewed_fetched > args.max_results:
+                print(f"  (capped at {args.max_results} search results)")
                 break
             try:
                 repo = g.get_repo(issue.repository.full_name)
