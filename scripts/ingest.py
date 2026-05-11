@@ -288,8 +288,12 @@ def main() -> None:
     since_iso  = since_dt.strftime("%Y-%m-%d")
     total_weeks = math.ceil(days / 7)
 
-    # Initialize GitHub client with explicit timeout for all API calls
-    g = Github(token, timeout=60) if token else Github(timeout=60)
+    # Initialize GitHub client with explicit timeout and deterministic page size
+    g = (
+        Github(token, timeout=60, per_page=_SEARCH_PAGE_SIZE)
+        if token
+        else Github(timeout=60, per_page=_SEARCH_PAGE_SIZE)
+    )
 
     # -- Look up engineer display name (best-effort) -------------------------
     engineer_name: str | None = None
