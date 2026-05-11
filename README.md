@@ -76,8 +76,8 @@ Provider/model settings do **not** belong in `.env`. Use `model_provider.json` f
 
 1. `--github-token` CLI flag (override/debug only — never logged)
 2. `GITHUB_TOKEN` environment variable
+   - If a `.env` file exists in the repo root, it is loaded first, so `GITHUB_TOKEN` from `.env` is included in this step
 3. `~/.pullstar/credentials` (central credentials file, `KEY=value` format)
-4. `.env` in the repo root
 
 For normal use, `.env` or `~/.pullstar/credentials` is recommended. The CLI flag is intended for one-off testing only.
 
