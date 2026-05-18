@@ -5,12 +5,23 @@ Usage:
     python scripts/ingest.py --login jsmith
     python scripts/ingest.py --login jsmith --days 14 --output-dir .pullstar
     python scripts/ingest.py --login jsmith --pr_insights
+    python scripts/ingest.py --login jsmith --api-mode rest
+
+GraphQL mode (default when GITHUB_TOKEN is set): fetches all PR, review, and
+comment data in 2–4 queries total, dramatically reducing latency and rate-limit
+pressure. Falls back to REST automatically when no token is found.
+
+REST mode (--api-mode rest, or automatic fallback): uses PyGithub REST API and
+supports unauthenticated access at 60 req/hr.
 
 Phase 2: Adds optional --pr_insights flag for detailed PR discussion context.
          When enabled, each authored PR is enriched with three new fields:
            - reviews_received_detail  (list of compact review objects)
            - comments_detail          (list of compact issue comment objects)
            - discussion_summary_stats (aggregate counts)
+         In GraphQL mode these are fetched at no extra API cost.
+         In REST mode each PR costs ~3 additional API calls, capped at
+         _INSIGHTS_PR_CAP PRs.
          Default mode (no flag) is unchanged.
 """
 
@@ -18,13 +29,14 @@ import argparse
 import json
 import math
 import os
+import socket
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 from github import Github, GithubException, RateLimitExceededException
-import socket
 
 # Default socket timeout for all network operations (GitHub API calls)
 socket.setdefaulttimeout(60)  # 60 seconds per API call max
@@ -120,13 +132,18 @@ def _truncate(text: str, limit: int) -> str:
     return " ".join(text.split())[:limit]
 
 
+def _parse_ts(s: str | None) -> str | None:
+    """Normalize a GitHub GraphQL ISO timestamp (trailing Z) to +00:00 form."""
+    return s.replace("Z", "+00:00") if s else None
+
+
 # ---------------------------------------------------------------------------
-# PR insights collector (--pr_insights flag only)
+# Caps and limits
 # ---------------------------------------------------------------------------
 #
-# Caps to control runtime and rate-limit footprint.
-# Each PR costs 3 core API calls: get_pull + get_reviews + get_issue_comments.
+# Each PR costs 3 core API calls in REST mode: get_pull + get_reviews + get_issue_comments.
 # At _INSIGHTS_PR_CAP=20, worst case is 60 additional calls against the 5000/hr limit.
+# In GraphQL mode, insights are folded into the Phase 1 query at no extra cost.
 #
 _INSIGHTS_PR_CAP       = 20   # max authored PRs to enrich with insight detail
 _INSIGHTS_MAX_REVIEWS  = 10   # max review objects stored per PR
@@ -138,10 +155,131 @@ _MAX_SEARCH_RESULTS    = 20  # max total results to iterate from search API
 _MAX_REVIEWED_SEARCH   = 20   # max results for reviewed-by search (tight cap for speed)
 _SEARCH_PAGE_SIZE      = 30   # fetch search results in smaller chunks
 
+# ---------------------------------------------------------------------------
+# GraphQL transport
+# ---------------------------------------------------------------------------
+
+_GRAPHQL_URL = "https://api.github.com/graphql"
+
+
+class _RateLimitError(Exception):
+    pass
+
+
+class _GraphQLError(Exception):
+    def __init__(self, errors: list) -> None:
+        self.errors = errors
+        super().__init__(str(errors))
+
+
+def _gql(token: str, query: str, variables: dict) -> dict:
+    """POST a GraphQL query to GitHub. Returns the data dict or raises on errors."""
+    resp = requests.post(
+        _GRAPHQL_URL,
+        json={"query": query, "variables": variables},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    if resp.status_code in (401, 403):
+        fail("GitHub API authentication failed — check your GITHUB_TOKEN.")
+    if not resp.ok:
+        fail(f"GitHub API HTTP error {resp.status_code}.")
+    result = resp.json()
+    if "errors" in result:
+        for err in result["errors"]:
+            if err.get("type") == "RATE_LIMITED":
+                raise _RateLimitError(err.get("message", "GitHub GraphQL rate limit exceeded."))
+        raise _GraphQLError(result["errors"])
+    return result.get("data", {})
+
+
+# ---------------------------------------------------------------------------
+# GraphQL query strings
+# ---------------------------------------------------------------------------
+
+_USER_QUERY = """
+query($login: String!) {
+  user(login: $login) { name }
+}
+"""
+
+# Base authored-PR query — fetches all PR fields plus accurate review total count.
+_AUTHORED_PRS_QUERY = """
+query($query: String!, $first: Int!, $cursor: String) {
+  search(query: $query, type: ISSUE, first: $first, after: $cursor) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      ... on PullRequest {
+        number title url state
+        createdAt mergedAt
+        additions deletions changedFiles
+        commits { totalCount }
+        body
+        labels(first: 10) { nodes { name } }
+        baseRefName
+        repository { nameWithOwner }
+        reviews { totalCount }
+      }
+    }
+  }
+}
+"""
+
+# Insights variant — same fields plus review and comment bodies (capped at 10 each).
+# Used in place of _AUTHORED_PRS_QUERY when --pr_insights is set; no extra API calls needed.
+_AUTHORED_PRS_INSIGHTS_QUERY = """
+query($query: String!, $first: Int!, $cursor: String) {
+  search(query: $query, type: ISSUE, first: $first, after: $cursor) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      ... on PullRequest {
+        number title url state
+        createdAt mergedAt
+        additions deletions changedFiles
+        commits { totalCount }
+        body
+        labels(first: 10) { nodes { name } }
+        baseRefName
+        repository { nameWithOwner }
+        reviews(first: 10) {
+          totalCount
+          nodes { state body author { login } submittedAt }
+        }
+        comments(first: 10) {
+          nodes { body author { login } createdAt }
+        }
+      }
+    }
+  }
+}
+"""
+
+# Fetches PRs reviewed by login, with their review details for client-side filtering.
+_REVIEWS_GIVEN_QUERY = """
+query($query: String!, $first: Int!, $cursor: String) {
+  search(query: $query, type: ISSUE, first: $first, after: $cursor) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      ... on PullRequest {
+        number title
+        repository { nameWithOwner }
+        reviews(first: 50) {
+          nodes { state body author { login } submittedAt }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+# ---------------------------------------------------------------------------
+# REST: PR insights collector (--pr_insights flag, REST mode only)
+# ---------------------------------------------------------------------------
 
 def fetch_pr_details(pr_data: dict, g: Github) -> dict | None:
     """
-    Fetch review and comment detail for one authored PR.
+    Fetch review and comment detail for one authored PR (REST mode only).
 
     Returns a dict of three insight fields to merge into the PR record:
       - reviews_received_detail:  list of compact review objects (up to _INSIGHTS_MAX_REVIEWS)
@@ -251,7 +389,8 @@ def main() -> None:
         help=(
             "Collect lightweight PR discussion context (reviews, revision cycles, "
             "comment counts) for the most recent authored PRs. "
-            f"Adds 2 API calls per PR, capped at {_INSIGHTS_PR_CAP} PRs."
+            f"No extra cost in GraphQL mode. "
+            f"Adds ~3 API calls per PR in REST mode, capped at {_INSIGHTS_PR_CAP} PRs."
         ),
     )
     parser.add_argument(
@@ -264,18 +403,44 @@ def main() -> None:
             "Lower for faster runs on high-activity users."
         ),
     )
+    parser.add_argument(
+        "--api-mode",
+        choices=["graphql", "rest"],
+        default="graphql",
+        help=(
+            "API mode: 'graphql' (default) uses GitHub GraphQL for efficiency and "
+            "falls back to REST automatically when no GITHUB_TOKEN is found; "
+            "'rest' forces the legacy REST API (supports unauthenticated access)."
+        ),
+    )
     args = parser.parse_args()
 
     # -- Credential resolution -----------------------------------------------
     token = resolve_secret("GITHUB_TOKEN", cli_value=args.github_token)
-    if not token:
+
+    # Determine effective API mode
+    if args.api_mode == "graphql" and not token:
         print(
-            "> Warning: GITHUB_TOKEN not found in any credential source — "
-            "using unauthenticated GitHub API access.\n"
-            "  Rate limit: 60 req/hr. Set GITHUB_TOKEN in .env or "
-            "~/.pullstar/credentials for higher limits.",
+            "> Warning: GITHUB_TOKEN not found — falling back to REST API "
+            "(unauthenticated, 60 req/hr).\n"
+            "  Set GITHUB_TOKEN in .env or ~/.pullstar/credentials to use GraphQL.",
             file=sys.stderr,
         )
+        use_graphql = False
+    elif args.api_mode == "graphql":
+        use_graphql = True
+    else:
+        # --api-mode rest
+        if not token:
+            print(
+                "> Warning: GITHUB_TOKEN not found in any credential source — "
+                "using unauthenticated GitHub API access.\n"
+                "  Rate limit: 60 req/hr. Set GITHUB_TOKEN in .env or "
+                "~/.pullstar/credentials for higher limits.",
+                file=sys.stderr,
+            )
+        use_graphql = False
+
     org_name = os.getenv("GITHUB_ORG", "").strip()
     login    = args.login.strip()
     days     = args.days
@@ -283,20 +448,31 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True)
 
-    since_dt   = datetime.now(timezone.utc) - timedelta(days=days)
-    since_iso  = since_dt.strftime("%Y-%m-%d")
+    since_dt    = datetime.now(timezone.utc) - timedelta(days=days)
+    since_iso   = since_dt.strftime("%Y-%m-%d")
     total_weeks = math.ceil(days / 7)
 
-    # Initialize GitHub client with explicit timeout for all API calls
-    g = Github(token, timeout=60) if token else Github(timeout=60)
+    # Initialize REST client if needed (use_graphql=True means g is unused)
+    g: Github | None = None
+    if not use_graphql:
+        g = Github(token, timeout=60) if token else Github(timeout=60)
 
     # -- Look up engineer display name (best-effort) -------------------------
     engineer_name: str | None = None
-    try:
-        user = g.get_user(login)
-        engineer_name = user.name
-    except GithubException:
-        pass
+    if use_graphql:
+        assert token  # guaranteed: use_graphql=True only when token is set
+        try:
+            data = _gql(token, _USER_QUERY, {"login": login})
+            engineer_name = (data.get("user") or {}).get("name")
+        except (_RateLimitError, _GraphQLError):
+            pass
+    else:
+        assert g is not None
+        try:
+            user = g.get_user(login)
+            engineer_name = user.name
+        except GithubException:
+            pass
 
     # -- Fetch PRs authored --------------------------------------------------
     print(f"> Fetching pull requests for {login} (last {days} days)...")
@@ -306,67 +482,183 @@ def main() -> None:
         pr_query += f" org:{org_name}"
 
     print(f"  query: {pr_query}")
-    print(f"  pagination: max {_MAX_SEARCH_RESULTS} results, {_SEARCH_PAGE_SIZE} per page")
-    prs_authored = []
-    try:
-        max_search_results = args.max_results
-        pr_results = g.search_issues(pr_query, sort="created", order="desc")
-        total_fetched = 0
-        for issue in pr_results:
-            total_fetched += 1
-            if total_fetched > max_search_results:
-                print(f"  (capped at {max_search_results} search results)")
-                break
-            if len(prs_authored) >= 100:
-                print("  (capped at 100 PRs)")
-                break
-            if len(prs_authored) > 0 and len(prs_authored) % 10 == 0:
-                print(f"  ... {len(prs_authored)} PRs fetched")
-            try:
-                repo = g.get_repo(issue.repository.full_name)
-                pr   = repo.get_pull(issue.number)
-            except GithubException as exc:
-                print(f"  warning: skipped PR #{issue.number} — {_scrub(str(exc))}", file=sys.stderr)
-                continue
+    print(f"  pagination: max {args.max_results} results, {_SEARCH_PAGE_SIZE} per page")
 
-            if pr.merged:
-                status = "merged"
-            elif pr.state == "closed":
-                status = "closed"
-            else:
-                status = "open"
+    prs_authored: list[dict] = []
 
-            prs_authored.append({
-                "number":               pr.number,
-                "title":                pr.title,
-                "url":                  pr.html_url,
-                "repository":           issue.repository.full_name,
-                "status":               status,
-                "created_at":           pr.created_at.isoformat(),
-                "merged_at":            pr.merged_at.isoformat() if pr.merged_at else None,
-                "lines_added":          pr.additions or 0,
-                "lines_deleted":        pr.deletions or 0,
-                "files_changed":        pr.changed_files or 0,
-                "commit_count":         pr.commits or 0,
-                "description_length":   len(pr.body or ""),
-                "label_names":          [lbl.name for lbl in pr.labels],
-                "base_branch":          pr.base.ref,
-                "reviews_received_count": 0,   # populated below when --pr_insights is set
-            })
+    if use_graphql:
+        assert token
+        prs_checked = 0
+        cursor: str | None = None
+        query_str = _AUTHORED_PRS_INSIGHTS_QUERY if args.pr_insights else _AUTHORED_PRS_QUERY
 
-    except RateLimitExceededException:
-        reset = g.get_rate_limit().search.reset
-        fail(f"GitHub rate limit hit fetching PRs. Resets at {reset.isoformat()} UTC.")
-    except GithubException as exc:
-        if exc.status == 422:
-            fail(
-                f"GitHub rejected the PR search query (422 Validation Failed).\n"
-                f"  This usually means the engineer login '{login}' is not visible to your token.\n"
-                f"  Fine-grained PATs cannot search across arbitrary users — use a classic PAT instead.\n"
-                f"  Create one at: https://github.com/settings/tokens (select 'repo' scope)\n"
-                f"  Full error: {exc.data.get('errors', exc.data)}"
-            )
-        fail(f"GitHub API error fetching PRs (status {exc.status}): {exc.data}")
+        try:
+            while prs_checked < args.max_results:
+                batch  = min(_SEARCH_PAGE_SIZE, args.max_results - prs_checked)
+                data   = _gql(token, query_str, {"query": pr_query, "first": batch, "cursor": cursor})
+                search = data["search"]
+
+                for node in search["nodes"]:
+                    prs_checked += 1
+                    if not node or "number" not in node:
+                        continue
+
+                    gql_state = node["state"]  # OPEN, CLOSED, MERGED (GraphQL enum)
+                    if gql_state == "MERGED":
+                        status = "merged"
+                    elif gql_state == "CLOSED":
+                        status = "closed"
+                    else:
+                        status = "open"
+
+                    reviews_count = node["reviews"]["totalCount"]
+                    pr_entry: dict = {
+                        "number":                 node["number"],
+                        "title":                  node["title"],
+                        "url":                    node["url"],
+                        "repository":             node["repository"]["nameWithOwner"],
+                        "status":                 status,
+                        "created_at":             _parse_ts(node["createdAt"]),
+                        "merged_at":              _parse_ts(node.get("mergedAt")),
+                        "lines_added":            node["additions"] or 0,
+                        "lines_deleted":          node["deletions"] or 0,
+                        "files_changed":          node["changedFiles"] or 0,
+                        "commit_count":           node["commits"]["totalCount"] or 0,
+                        "description_length":     len(node.get("body") or ""),
+                        "label_names":            [lbl["name"] for lbl in node["labels"]["nodes"]],
+                        "base_branch":            node["baseRefName"],
+                        "reviews_received_count": reviews_count,
+                    }
+
+                    if args.pr_insights and len(prs_authored) < _INSIGHTS_PR_CAP:
+                        reviews_nodes  = (node["reviews"]["nodes"]  or [])[:_INSIGHTS_MAX_REVIEWS]
+                        comments_nodes = (node["comments"]["nodes"] or [])[:_INSIGHTS_MAX_COMMENTS]
+
+                        reviews_detail: list[dict] = []
+                        changes_requested_count = 0
+                        approved_count = 0
+                        for r in reviews_nodes:
+                            state_norm = normalize_review_state(r.get("state") or "COMMENTED")
+                            if state_norm == "changes_requested":
+                                changes_requested_count += 1
+                            if state_norm == "approved":
+                                approved_count += 1
+                            body = (r.get("body") or "").strip()
+                            reviews_detail.append({
+                                "reviewer_login": (r.get("author") or {}).get("login"),
+                                "state":          state_norm,
+                                "submitted_at":   _parse_ts(r.get("submittedAt")),
+                                "body_length":    len(body),
+                                "body_excerpt":   _truncate(body, _INSIGHTS_EXCERPT_LEN) if body else "",
+                            })
+
+                        comments_detail: list[dict] = []
+                        for c in comments_nodes:
+                            body = (c.get("body") or "").strip()
+                            comments_detail.append({
+                                "author_login": (c.get("author") or {}).get("login"),
+                                "created_at":   _parse_ts(c.get("createdAt")),
+                                "body_length":  len(body),
+                                "body_excerpt": _truncate(body, _INSIGHTS_EXCERPT_LEN) if body else "",
+                                "comment_type": "issue_comment",
+                            })
+
+                        pr_entry.update({
+                            "reviews_received_detail":  reviews_detail,
+                            "comments_detail":          comments_detail,
+                            "discussion_summary_stats": {
+                                "review_count":            len(reviews_detail),
+                                "comment_count":           len(comments_detail),
+                                "changes_requested_count": changes_requested_count,
+                                "approved_count":          approved_count,
+                            },
+                        })
+                        pr_entry["reviews_received_count"] = len(reviews_detail)
+
+                    prs_authored.append(pr_entry)
+                    if len(prs_authored) > 0 and len(prs_authored) % 10 == 0:
+                        print(f"  ... {len(prs_authored)} PRs fetched")
+
+                if not search["pageInfo"]["hasNextPage"] or prs_checked >= args.max_results:
+                    if prs_checked >= args.max_results:
+                        print(f"  (capped at {args.max_results} search results)")
+                    break
+                cursor = search["pageInfo"]["endCursor"]
+
+        except _RateLimitError as exc:
+            fail(str(exc))
+        except _GraphQLError as exc:
+            errors_str = str(exc.errors)
+            if any(kw in errors_str.lower() for kw in ("not found", "forbidden", "validation")):
+                fail(
+                    f"GitHub rejected the PR search query.\n"
+                    f"  The engineer login '{login}' may not be visible to your token.\n"
+                    f"  Fine-grained PATs cannot search across arbitrary users — use a classic PAT instead.\n"
+                    f"  Create one at: https://github.com/settings/tokens (select 'repo' scope)\n"
+                    f"  Full error: {exc.errors}"
+                )
+            fail(f"GitHub GraphQL error fetching PRs: {exc.errors}")
+
+    else:  # REST
+        assert g is not None
+        try:
+            max_search_results = args.max_results
+            pr_results = g.search_issues(pr_query, sort="created", order="desc")
+            total_fetched = 0
+            for issue in pr_results:
+                total_fetched += 1
+                if total_fetched > max_search_results:
+                    print(f"  (capped at {max_search_results} search results)")
+                    break
+                if len(prs_authored) >= 100:
+                    print("  (capped at 100 PRs)")
+                    break
+                if len(prs_authored) > 0 and len(prs_authored) % 10 == 0:
+                    print(f"  ... {len(prs_authored)} PRs fetched")
+                try:
+                    repo = g.get_repo(issue.repository.full_name)
+                    pr   = repo.get_pull(issue.number)
+                except GithubException as exc:
+                    print(f"  warning: skipped PR #{issue.number} — {_scrub(str(exc))}", file=sys.stderr)
+                    continue
+
+                if pr.merged:
+                    status = "merged"
+                elif pr.state == "closed":
+                    status = "closed"
+                else:
+                    status = "open"
+
+                prs_authored.append({
+                    "number":               pr.number,
+                    "title":                pr.title,
+                    "url":                  pr.html_url,
+                    "repository":           issue.repository.full_name,
+                    "status":               status,
+                    "created_at":           pr.created_at.isoformat(),
+                    "merged_at":            pr.merged_at.isoformat() if pr.merged_at else None,
+                    "lines_added":          pr.additions or 0,
+                    "lines_deleted":        pr.deletions or 0,
+                    "files_changed":        pr.changed_files or 0,
+                    "commit_count":         pr.commits or 0,
+                    "description_length":   len(pr.body or ""),
+                    "label_names":          [lbl.name for lbl in pr.labels],
+                    "base_branch":          pr.base.ref,
+                    "reviews_received_count": 0,   # populated below when --pr_insights is set
+                })
+
+        except RateLimitExceededException:
+            fail("GitHub rate limit hit fetching PRs. Wait a moment and retry, or use --api-mode graphql.")
+        except GithubException as exc:
+            if exc.status == 422:
+                fail(
+                    f"GitHub rejected the PR search query (422 Validation Failed).\n"
+                    f"  This usually means the engineer login '{login}' is not visible to your token.\n"
+                    f"  Fine-grained PATs cannot search across arbitrary users — use a classic PAT instead.\n"
+                    f"  Create one at: https://github.com/settings/tokens (select 'repo' scope)\n"
+                    f"  Full error: {exc.data.get('errors', exc.data)}"
+                )
+            fail(f"GitHub API error fetching PRs (status {exc.status}): {exc.data}")
 
     print(f"> Found {len(prs_authored)} PRs authored")
 
@@ -379,53 +671,102 @@ def main() -> None:
 
     print(f"  query: {review_query}")
     print(f"  pagination: max {_MAX_REVIEWED_SEARCH} results")
-    reviews_given = []
-    try:
-        reviewed_results = g.search_issues(review_query, sort="updated", order="desc")
-        prs_checked = 0
-        total_reviewed_fetched = 0
-        for issue in reviewed_results:
-            total_reviewed_fetched += 1
-            if total_reviewed_fetched > _MAX_REVIEWED_SEARCH:
-                print(f"  (capped at {_MAX_REVIEWED_SEARCH} search results)")
-                break
-            if prs_checked >= 100 or len(reviews_given) >= 100:
-                break
-            prs_checked += 1
-            try:
-                repo = g.get_repo(issue.repository.full_name)
-                pr   = repo.get_pull(issue.number)
-                for review in pr.get_reviews():
-                    if not review.user or review.user.login != login:
-                        continue
-                    submitted = as_utc(review.submitted_at)
-                    if submitted is None or submitted < since_dt:
-                        continue
-                    reviews_given.append({
-                        "repository":  issue.repository.full_name,
-                        "pr_number":   pr.number,
-                        "pr_title":    pr.title,
-                        "state":       normalize_review_state(review.state or "COMMENTED"),
-                        "submitted_at": submitted.isoformat(),
-                        "body_length":  len(review.body or ""),
-                    })
-            except GithubException as exc:
-                print(f"  warning: skipped review PR #{issue.number} — {_scrub(str(exc))}", file=sys.stderr)
-                continue
 
-    except RateLimitExceededException:
-        reset = g.get_rate_limit().search.reset
-        fail(f"GitHub rate limit hit fetching reviews. Resets at {reset.isoformat()} UTC.")
-    except GithubException as exc:
-        fail(f"GitHub API error fetching reviews (status {exc.status}): {exc.data}")
+    reviews_given: list[dict] = []
+
+    if use_graphql:
+        assert token
+        prs_checked = 0
+        cursor = None
+
+        try:
+            while prs_checked < args.max_results:
+                batch  = min(_SEARCH_PAGE_SIZE, args.max_results - prs_checked)
+                data   = _gql(token, _REVIEWS_GIVEN_QUERY, {"query": review_query, "first": batch, "cursor": cursor})
+                search = data["search"]
+
+                for node in search["nodes"]:
+                    prs_checked += 1
+                    if not node or "number" not in node:
+                        continue
+                    repo_name = node["repository"]["nameWithOwner"]
+                    for review in (node["reviews"]["nodes"] or []):
+                        if not review.get("author") or review["author"].get("login") != login:
+                            continue
+                        submitted_ts = _parse_ts(review.get("submittedAt"))
+                        if not submitted_ts:
+                            continue
+                        submitted = datetime.fromisoformat(submitted_ts)
+                        if submitted < since_dt:
+                            continue
+                        reviews_given.append({
+                            "repository":   repo_name,
+                            "pr_number":    node["number"],
+                            "pr_title":     node["title"],
+                            "state":        normalize_review_state(review.get("state") or "COMMENTED"),
+                            "submitted_at": submitted_ts,
+                            "body_length":  len(review.get("body") or ""),
+                        })
+
+                if not search["pageInfo"]["hasNextPage"] or prs_checked >= args.max_results:
+                    if prs_checked >= args.max_results:
+                        print(f"  (capped at {args.max_results} search results)")
+                    break
+                cursor = search["pageInfo"]["endCursor"]
+
+        except _RateLimitError as exc:
+            fail(str(exc))
+        except _GraphQLError as exc:
+            fail(f"GitHub GraphQL error fetching reviews: {exc.errors}")
+
+    else:  # REST
+        assert g is not None
+        try:
+            reviewed_results = g.search_issues(review_query, sort="updated", order="desc")
+            prs_checked = 0
+            total_reviewed_fetched = 0
+            for issue in reviewed_results:
+                total_reviewed_fetched += 1
+                if total_reviewed_fetched > _MAX_REVIEWED_SEARCH:
+                    print(f"  (capped at {_MAX_REVIEWED_SEARCH} search results)")
+                    break
+                if prs_checked >= 100 or len(reviews_given) >= 100:
+                    break
+                prs_checked += 1
+                try:
+                    repo = g.get_repo(issue.repository.full_name)
+                    pr   = repo.get_pull(issue.number)
+                    for review in pr.get_reviews():
+                        if not review.user or review.user.login != login:
+                            continue
+                        submitted = as_utc(review.submitted_at)
+                        if submitted is None or submitted < since_dt:
+                            continue
+                        reviews_given.append({
+                            "repository":  issue.repository.full_name,
+                            "pr_number":   pr.number,
+                            "pr_title":    pr.title,
+                            "state":       normalize_review_state(review.state or "COMMENTED"),
+                            "submitted_at": submitted.isoformat(),
+                            "body_length":  len(review.body or ""),
+                        })
+                except GithubException as exc:
+                    print(f"  warning: skipped review PR #{issue.number} — {_scrub(str(exc))}", file=sys.stderr)
+                    continue
+
+        except RateLimitExceededException:
+            fail("GitHub rate limit hit fetching reviews. Wait a moment and retry, or use --api-mode graphql.")
+        except GithubException as exc:
+            fail(f"GitHub API error fetching reviews (status {exc.status}): {exc.data}")
 
     print(f"> Found {len(reviews_given)} reviews given")
 
-    # -- PR insights (optional) ----------------------------------------------
-    # When --pr_insights is set, each authored PR (up to _INSIGHTS_PR_CAP) is
-    # enriched IN PLACE with reviews_received_detail, comments_detail, and
-    # discussion_summary_stats.  No separate top-level key is added.
-    if args.pr_insights:
+    # -- PR insights (REST mode only) ----------------------------------------
+    # GraphQL mode already embedded insights into prs_authored during Phase 1.
+    # In REST mode, each authored PR (up to _INSIGHTS_PR_CAP) is enriched IN PLACE
+    # with reviews_received_detail, comments_detail, and discussion_summary_stats.
+    if args.pr_insights and not use_graphql:
+        assert g is not None
         to_enrich = prs_authored[:_INSIGHTS_PR_CAP]
         print(f"> Fetching PR insights for {len(to_enrich)} PRs "
               f"(capped at {_INSIGHTS_PR_CAP}, ~3 API calls each)...")
