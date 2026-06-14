@@ -46,9 +46,26 @@ else
   echo "--> model_provider.json already exists, skipping"
 fi
 
+# --- Browser UI launch files ---
+chmod +x "$REPO_ROOT/scripts/run_browser.sh"
+if [ -f "$REPO_ROOT/PullStar.command" ]; then
+  chmod +x "$REPO_ROOT/PullStar.command"
+fi
+
 echo ""
-echo "==> Done. Next steps:"
-echo "    1. Edit .env            — add GITHUB_TOKEN and your AI provider key"
+echo "==> Done."
+echo ""
+echo "    First, configure credentials:"
+echo "    1. Edit .env                — add GITHUB_TOKEN and your AI provider key"
 echo "    2. Edit model_provider.json — set provider, model, temperature, max_tokens"
-echo "    3. Run a brief:         ./scripts/run_local_brief.sh <github-login>"
-echo "    4. Open the dashboard:  ./scripts/run_ui.sh"
+echo ""
+echo "    Option A — CLI + lightweight dashboard (primary):"
+echo "    3. Run a brief:   ./scripts/run_local_brief.sh <github-login>"
+echo "    4. View results:  ./scripts/run_ui.sh"
+echo ""
+echo "    Option B — Browser UI (full pipeline in browser, no CLI needed):"
+echo "    3. Start the UI:  ./scripts/run_browser.sh"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo "       macOS tip:    double-click PullStar.command in Finder"
+  echo "       Windows:      double-click PullStar.bat"
+fi
