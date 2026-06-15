@@ -130,7 +130,7 @@ with gr.Blocks(title="PullStar 1-on-1") as demo:
         """
 # PullStar 1-on-1
 
-**Generate a manager-ready 1-on-1 brief from a GitHub engineer's recent activity using the open-source PullStar pipeline.
+Generate a manager-ready 1-on-1 brief from a GitHub engineer's recent activity using the open-source PullStar pipeline.
 
 **Open-source repo:** `github.com/pullstar-ai/pullstar`
 

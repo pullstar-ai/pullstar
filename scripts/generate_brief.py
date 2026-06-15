@@ -706,7 +706,7 @@ def main() -> None:
     tmp_path.replace(output_path)
     print(f"> Output written to {output_path}")
     print("""
-✓ PullStar brief generated successfully.
+[OK] PullStar brief generated successfully.
 
 If this was useful, you can join the early access list for PullStar Pro:
 https://savory-step-9d7.notion.site/32fc2b5d4feb8054b937f54c753ff73b?pvs=105

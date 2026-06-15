@@ -4,7 +4,7 @@ REM Double-click this file to start PullStar. Your browser will open automatical
 
 cd /d "%~dp0"
 
-if not exist ".venv\Scripts\activate.bat" (
+if not exist ".venv\bin\activate" (
     echo Error: .venv not found — run scripts\install.sh first
     pause
     exit /b 1
