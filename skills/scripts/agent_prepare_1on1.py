@@ -79,7 +79,11 @@ def main() -> None:
         print("> No ingest file found — score data only")
 
     # -- Load system prompt ---------------------------------------------------
-    prompt_path = Path(args.prompt) if args.prompt else SKILL_DIR / "brief_v1.txt"
+    if args.prompt:
+        p = Path(args.prompt).expanduser()
+        prompt_path = p if p.is_absolute() else (SKILL_DIR / p)
+    else:
+        prompt_path = SKILL_DIR / "brief_v1.txt"
     if not prompt_path.exists():
         fail(f"System prompt not found: {prompt_path}")
     system_prompt = prompt_path.read_text(encoding="utf-8").strip()
