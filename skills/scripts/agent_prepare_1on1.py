@@ -30,7 +30,6 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 SKILL_DIR = Path(__file__).parent.parent
 
-import sys
 sys.path.insert(0, str(SKILL_DIR))
 from prompt_builder import build_llm_input_payload, write_llm_input
 

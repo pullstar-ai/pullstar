@@ -50,7 +50,8 @@ def main() -> None:
     parser.add_argument("--api-mode",     choices=["graphql", "rest"], default="graphql",
                         help="GitHub API mode: graphql (default) or rest")
     parser.add_argument("--prompt",       default=None,
-                        help="System prompt file for LLM (default: brief_v1.txt)")
+                        help="System prompt file for LLM (default: brief_v1.txt; "
+                             "relative paths resolve against the skill directory)")
     args = parser.parse_args()
 
     login = args.login.strip()
