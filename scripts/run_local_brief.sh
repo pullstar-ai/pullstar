@@ -56,7 +56,7 @@ fi
 
 if [ -z "$LOGIN" ]; then
   echo "Usage: $0 --login <github-login> [--days N] [--max-results N] [--output-dir path]" >&2
-  echo "       $0 --login <github-login> [--pr-insights] [--api-mode graphql|rest]" >&2
+  echo "       $0 --login <github-login> [--pr_insights] [--api-mode graphql|rest]" >&2
   echo "       $0 --login <github-login> [--provider-config path]" >&2
   exit 1
 fi
