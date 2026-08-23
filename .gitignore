@@ -29,6 +29,11 @@ Thumbs.db
 
 # Claude Code local config
 .claude/
+
+# Prompt variants and exported data files must never be committed
+skills/brief_*_v*.txt
+!skills/brief_v1.txt
+*.csv
 # docs
 oss packaging.md
 Plan.md
