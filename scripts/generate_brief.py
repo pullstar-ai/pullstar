@@ -34,12 +34,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
+# Allow ``python scripts/generate_brief.py`` from a bare checkout (no install needed).
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 from dotenv import load_dotenv
-from prompt_builder import build_llm_input_payload, write_llm_input
+
+from pullstar.prompting import build_llm_input_payload, write_llm_input
+from pullstar.resources import load_brief_prompt
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-PROMPT_PATH             = Path(__file__).parent.parent / "prompts" / "brief_v1.txt"
 DEFAULT_PROVIDER_CONFIG = Path(__file__).parent.parent / "model_provider.json"
 
 # ---------------------------------------------------------------------------
@@ -64,12 +70,6 @@ PROVIDERS: dict[str, dict] = {
 def fail(msg: str) -> NoReturn:
     print(f"Error: {msg}", file=sys.stderr)
     sys.exit(1)
-
-
-def load_prompt() -> str:
-    if not PROMPT_PATH.exists():
-        fail(f"System prompt not found: {PROMPT_PATH}")
-    return PROMPT_PATH.read_text(encoding="utf-8").strip()
 
 
 def load_provider_config(config_path: Path) -> dict:
@@ -115,7 +115,7 @@ def load_provider_config(config_path: Path) -> dict:
 
 # ---------------------------------------------------------------------------
 # PR insights stats — used only by _insights_stats_for_stub / generate_stub_brief.
-# Prompt construction (user message, PR context) lives in prompt_builder.py.
+# Prompt construction (user message, PR context) lives in pullstar.prompting.
 # ---------------------------------------------------------------------------
 
 _STUB_INSIGHTS_PR_CAP = 10   # how many insight PRs the stub brief samples
@@ -649,7 +649,7 @@ def main() -> None:
     # -- Build canonical LLM input payload ------------------------------------
     # Always written for debugging and agent workflow parity.
     llm_input = build_llm_input_payload(
-        score, ingest, load_prompt(),
+        score, ingest, load_brief_prompt(),
         model=model, provider=provider, mode=args.mode,
     )
     llm_input_path = write_llm_input(llm_input, output_dir)

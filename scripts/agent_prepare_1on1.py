@@ -8,7 +8,7 @@ Usage:
 Reads:
     .pullstar/score_{login}.json   (required)
     .pullstar/ingest_{login}.json  (optional — for engineer name, org, stats, PR insights)
-    prompts/brief_v1.txt           (system prompt)
+    pullstar/prompts/brief_v1.txt  (system prompt — packaged with the pullstar distribution)
 
 Writes:
     .pullstar/llm_input_{login}.json
@@ -23,13 +23,17 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+# Allow ``python scripts/agent_prepare_1on1.py`` from a bare checkout (no install needed).
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 from dotenv import load_dotenv
 
+from pullstar.prompting import build_llm_input_payload, write_llm_input
+from pullstar.resources import load_brief_prompt
+
 load_dotenv(Path(__file__).parent.parent / ".env")
-
-PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "brief_v1.txt"
-
-from prompt_builder import build_llm_input_payload, write_llm_input
 
 
 def fail(msg: str) -> NoReturn:
@@ -72,10 +76,8 @@ def main() -> None:
     else:
         print("> No ingest file found — score data only")
 
-    # -- Load system prompt ---------------------------------------------------
-    if not PROMPT_PATH.exists():
-        fail(f"System prompt not found: {PROMPT_PATH}")
-    system_prompt = PROMPT_PATH.read_text(encoding="utf-8").strip()
+    # -- Load system prompt (packaged with pullstar) -------------------------
+    system_prompt = load_brief_prompt()
 
     # -- Build and write LLM input payload ------------------------------------
     payload = build_llm_input_payload(

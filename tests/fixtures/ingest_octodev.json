@@ -1,0 +1,214 @@
+{
+  "engineer_login": "octodev",
+  "engineer_name": "Octo Dev",
+  "org": "acme",
+  "lookback_days": 30,
+  "ingested_at": "2026-06-30T12:00:00+00:00",
+  "prs_authored": [
+    {
+      "number": 101,
+      "title": "PR 101: change in acme/web",
+      "url": "https://github.com/acme/web/pull/101",
+      "repository": "acme/web",
+      "status": "merged",
+      "created_at": "2026-06-02T08:00:00+00:00",
+      "merged_at": "2026-06-03T08:00:00+00:00",
+      "lines_added": 120,
+      "lines_deleted": 30,
+      "files_changed": 6,
+      "commit_count": 3,
+      "description_length": 210,
+      "label_names": [
+        "feature"
+      ],
+      "base_branch": "main",
+      "reviews_received_count": 2,
+      "reviews_received_detail": [
+        {
+          "reviewer_login": "alice",
+          "state": "changes_requested",
+          "submitted_at": "2026-06-05T10:00:00+00:00",
+          "body_length": 120,
+          "body_excerpt": "please refactor this section for clarity and add tests"
+        },
+        {
+          "reviewer_login": "alice",
+          "state": "approved",
+          "submitted_at": "2026-06-06T10:00:00+00:00",
+          "body_length": 20,
+          "body_excerpt": "lgtm now"
+        }
+      ],
+      "comments_detail": [
+        {
+          "author_login": "teammate",
+          "created_at": "2026-06-11T09:00:00+00:00",
+          "body_length": 80,
+          "body_excerpt": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "comment_type": "issue_comment"
+        }
+      ],
+      "discussion_summary_stats": {
+        "review_count": 2,
+        "comment_count": 1,
+        "changes_requested_count": 1,
+        "approved_count": 1
+      }
+    },
+    {
+      "number": 102,
+      "title": "PR 102: change in acme/web",
+      "url": "https://github.com/acme/web/pull/102",
+      "repository": "acme/web",
+      "status": "merged",
+      "created_at": "2026-06-09T08:00:00+00:00",
+      "merged_at": "2026-06-10T20:00:00+00:00",
+      "lines_added": 60,
+      "lines_deleted": 10,
+      "files_changed": 3,
+      "commit_count": 2,
+      "description_length": 90,
+      "label_names": [
+        "bug"
+      ],
+      "base_branch": "main",
+      "reviews_received_count": 1,
+      "reviews_received_detail": [
+        {
+          "reviewer_login": "reviewer1",
+          "state": "approved",
+          "submitted_at": "2026-06-10T09:00:00+00:00",
+          "body_length": 15,
+          "body_excerpt": "xxxxxxxxxxxxxxx"
+        }
+      ],
+      "comments_detail": [],
+      "discussion_summary_stats": {
+        "review_count": 1,
+        "comment_count": 0,
+        "changes_requested_count": 0,
+        "approved_count": 1
+      }
+    },
+    {
+      "number": 103,
+      "title": "PR 103: change in acme/api",
+      "url": "https://github.com/acme/api/pull/103",
+      "repository": "acme/api",
+      "status": "merged",
+      "created_at": "2026-06-16T08:00:00+00:00",
+      "merged_at": "2026-06-17T08:00:00+00:00",
+      "lines_added": 300,
+      "lines_deleted": 120,
+      "files_changed": 9,
+      "commit_count": 5,
+      "description_length": 15,
+      "label_names": [],
+      "base_branch": "main",
+      "reviews_received_count": 1
+    },
+    {
+      "number": 104,
+      "title": "PR 104: change in acme/api",
+      "url": "https://github.com/acme/api/pull/104",
+      "repository": "acme/api",
+      "status": "merged",
+      "created_at": "2026-06-20T08:00:00+00:00",
+      "merged_at": "2026-06-21T08:00:00+00:00",
+      "lines_added": 40,
+      "lines_deleted": 5,
+      "files_changed": 2,
+      "commit_count": 1,
+      "description_length": 140,
+      "label_names": [
+        "chore"
+      ],
+      "base_branch": "develop",
+      "reviews_received_count": 0
+    },
+    {
+      "number": 105,
+      "title": "PR 105: change in acme/web",
+      "url": "https://github.com/acme/web/pull/105",
+      "repository": "acme/web",
+      "status": "open",
+      "created_at": "2026-06-24T08:00:00+00:00",
+      "merged_at": null,
+      "lines_added": 1500,
+      "lines_deleted": 200,
+      "files_changed": 22,
+      "commit_count": 12,
+      "description_length": 0,
+      "label_names": [],
+      "base_branch": "main",
+      "reviews_received_count": 0
+    },
+    {
+      "number": 106,
+      "title": "PR 106: change in acme/web",
+      "url": "https://github.com/acme/web/pull/106",
+      "repository": "acme/web",
+      "status": "closed",
+      "created_at": "2026-06-26T08:00:00+00:00",
+      "merged_at": null,
+      "lines_added": 80,
+      "lines_deleted": 80,
+      "files_changed": 4,
+      "commit_count": 3,
+      "description_length": 60,
+      "label_names": [
+        "wip"
+      ],
+      "base_branch": "feature/x",
+      "reviews_received_count": 0
+    }
+  ],
+  "reviews_given": [
+    {
+      "repository": "acme/web",
+      "pr_number": 201,
+      "pr_title": "teammate PR",
+      "state": "approved",
+      "submitted_at": "2026-06-04T09:00:00+00:00",
+      "body_length": 0
+    },
+    {
+      "repository": "acme/web",
+      "pr_number": 202,
+      "pr_title": "teammate PR 2",
+      "state": "changes_requested",
+      "submitted_at": "2026-06-08T09:00:00+00:00",
+      "body_length": 140
+    },
+    {
+      "repository": "acme/api",
+      "pr_number": 203,
+      "pr_title": "teammate PR 3",
+      "state": "commented",
+      "submitted_at": "2026-06-15T09:00:00+00:00",
+      "body_length": 75
+    },
+    {
+      "repository": "acme/api",
+      "pr_number": 204,
+      "pr_title": "teammate PR 4",
+      "state": "approved",
+      "submitted_at": "2026-06-22T09:00:00+00:00",
+      "body_length": 55
+    }
+  ],
+  "reviews_received": [],
+  "summary_stats": {
+    "total_prs_authored": 6,
+    "prs_merged": 4,
+    "prs_open": 1,
+    "prs_closed_unmerged": 1,
+    "total_reviews_given": 4,
+    "total_reviews_received": 4,
+    "total_lines_added": 2100,
+    "total_lines_deleted": 445,
+    "avg_pr_size_lines": 424.2,
+    "active_weeks": 4,
+    "total_weeks": 5
+  }
+}

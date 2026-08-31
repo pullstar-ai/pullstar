@@ -1,0 +1,71 @@
+Engineer: octodev (Octo Dev)
+Period: Last 30 days
+Org: acme
+Overall confidence: medium
+
+=== DIMENSION SCORES ===
+Velocity: 20/20 (medium confidence)
+  - 4 PRs merged — one every 8 days on average
+  - Typically merged within a day or two
+  - Work spans 2 repos
+Pr Quality: 16/20 (medium confidence)
+  - Mid-sized PRs — avg 424 lines changed
+  - Descriptions on 4 of 6 PRs — inconsistent coverage
+  - 4 of 6 PRs are labeled
+  [flag] 1 PR exceeded 1000 lines — worth discussing scope or decomposition
+Review Participation: 13/20 (low confidence)
+  - 4 reviews given
+  - Written comments on 3 of 4 reviews
+  - Reviewed PRs across 2 repos
+Collaboration: 9/20 (medium confidence)
+  - PRs across 2 repos
+  - Avg 0.7 reviews received per PR
+  - Authored 6 PRs and gave 4 reviews — active in both directions
+Consistency: 18/20 (high confidence)
+  - Active in 4 of 5 weeks (80%)
+  - One quiet week, otherwise consistent week-over-week
+  - Work distributed across weeks — no major bursts
+
+Total: 76/100 (all 5 dimensions scored)
+
+=== RAW STATS ===
+PRs authored: 6 (4 merged, 1 open, 1 closed unmerged)
+Reviews given: 4
+Code volume: +2100 / -445 lines
+Avg PR size: 424.2 lines
+Active weeks: 4 of 5
+
+=== FLAGS (highest severity first) ===
+[CAUTION] pr_quality: 1 PR exceeded 1000 lines — worth discussing scope or decomposition
+
+=== PR DISCUSSION SUMMARY ===
+Based on 2 authored PRs with review/comment data:
+- Reviews received: 3 total (2 of 2 PRs had at least 1 review)
+- Change requests: 1 PR had at least one change request
+- Approvals: 2 PRs received a formal approval
+- Visible revision cycles: 1 (changes_requested followed by approval on same PR)
+- Avg distinct reviewers per PR: 1.0
+- PRs with issue comments: 1 of 2 (1 comments total)
+
+=== PR CONTEXT (OPT-IN) ===
+The following PR titles, reviews, and comments are included because PR insights mode is enabled.
+Use them to understand engineering behavior and collaboration patterns.
+Do NOT quote them directly in the final brief.
+PR #101 — "PR 101: change in acme/web" (acme/web, merged, +120/-30 lines)
+Description: 210 chars (body not captured in ingest)
+
+Review (human) — alice [changes_requested, 2026-06-05]:
+please refactor this section for clarity and add tests
+
+Review (human) — alice [approved, 2026-06-06]:
+lgtm now
+
+Comment (human) — teammate [2026-06-11]:
+yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+---
+
+PR #102 — "PR 102: change in acme/web" (acme/web, merged, +60/-10 lines)
+Description: 90 chars (body not captured in ingest)
+
+Review (human) — reviewer1 [approved, 2026-06-10]:
+xxxxxxxxxxxxxxx

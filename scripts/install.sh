@@ -15,9 +15,9 @@ else
   echo "--> .venv already exists, skipping"
 fi
 
-echo "--> Installing Python dependencies"
+echo "--> Installing PullStar (editable) + engine/UI dependencies"
 .venv/bin/pip install --quiet --upgrade pip
-.venv/bin/pip install --quiet -r scripts/requirements.txt
+.venv/bin/pip install --quiet -e ".[ui]"
 
 # --- UI dependencies ---
 if [ -d "ui" ]; then

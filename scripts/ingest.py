@@ -38,9 +38,6 @@ import requests
 from dotenv import load_dotenv
 from github import Github, GithubException, RateLimitExceededException
 
-# Default socket timeout for all network operations (GitHub API calls)
-socket.setdefaulttimeout(60)  # 60 seconds per API call max
-
 # Load .env from repo root regardless of where the script is invoked from
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -369,6 +366,10 @@ def fetch_pr_details(pr_data: dict, g: Github) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    # Cap every GitHub API call at 60s. Set here (not at import) so importing
+    # this module has no global side effects.
+    socket.setdefaulttimeout(60)
+
     parser = argparse.ArgumentParser(
         description="Fetch GitHub activity for a PullStar 1-on-1 brief."
     )

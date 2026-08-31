@@ -44,11 +44,36 @@ cd pullstar
 Or manually:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r scripts/requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -e ".[ui]"
 cd ui && npm install && cd ..
 cp .env.example .env
 cp model_provider.json.example model_provider.json
 ```
+
+---
+
+## Use as a Python package
+
+PullStar's analysis engine is packaged as `pullstar` (requires Python 3.11+):
+
+```bash
+pip install .          # engine only
+pip install ".[ui]"    # engine + Gradio demo (app.py)
+```
+
+```python
+import pullstar
+pullstar.__version__            # -> "0.1.0"
+
+from pullstar.scoring import score_velocity, score_pr_quality        # deterministic scoring
+from pullstar.prompting import build_user_message, build_llm_input_payload
+from pullstar.resources import load_brief_prompt                     # packaged system prompt
+```
+
+Importing `pullstar` is side-effect free: no network calls, no credential
+access, no files written, no UI launched. The `pullstar.*` package is pure
+standard library; the GitHub ingest and provider-backed brief steps live in
+`scripts/` and pull in the runtime dependencies above.
 
 ---
 

@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pullstar"
+version = "0.1.0"
+description = "A private 1-on-1 prep engine for engineering managers: turns a developer's recent GitHub activity into a deterministic score and a manager-ready brief."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Jack Pesso" }]
+keywords = [
+    "github",
+    "engineering-management",
+    "one-on-one",
+    "code-review",
+    "developer-analytics",
+    "pull-requests",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+# Engine runtime dependencies — translated from the historical
+# scripts/requirements.txt. The UI dependency (gradio) is intentionally NOT
+# here; it lives in the [ui] extra. The reusable pullstar.* package itself
+# imports only the standard library — these deps are for the analysis scripts
+# (GitHub ingest + provider-backed brief generation).
+dependencies = [
+    "requests>=2.28.0",
+    "PyGithub>=2.1.1",
+    "python-dotenv>=1.0.0",
+    "anthropic>=0.25.0",
+    "openai>=1.30.0",
+]
+
+[project.optional-dependencies]
+# Gradio demo application (app.py). Not required to import or use the engine.
+ui = ["gradio>=4.0.0"]
+# Test / build tooling.
+dev = ["pytest>=8.0", "build>=1.2"]
+
+[project.urls]
+Homepage = "https://github.com/pullstar-ai/pullstar"
+Repository = "https://github.com/pullstar-ai/pullstar"
+
+[tool.setuptools]
+# Explicit package list — keep scripts/, skills/, ui/, assets/, tests/ out of
+# the distribution. scripts/*.py remain runnable from the source tree as thin
+# CLI wrappers around the pullstar.* package.
+packages = ["pullstar", "pullstar.prompts"]
+
+[tool.setuptools.package-data]
+"pullstar.prompts" = ["*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
