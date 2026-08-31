@@ -38,7 +38,16 @@ def test_build_llm_input_payload_shape(ingest_octodev) -> None:
     assert md["provider"] == "p1" and md["model"] == "m1"
     assert md["total_score"] == 76
     assert md["has_insights"] is True
+    assert md["prompt"] is None  # not supplied here
     assert "generated_at" in md
+
+
+def test_build_llm_input_payload_records_prompt_name(ingest_octodev) -> None:
+    payload = prompting.build_llm_input_payload(
+        _score(), ingest_octodev, "SYSTEM",
+        model=None, provider=None, mode="stub", prompt_name="brief_v2",
+    )
+    assert payload["metadata"]["prompt"] == "brief_v2"
 
 
 def test_write_llm_input_atomic(tmp_path, ingest_octodev) -> None:

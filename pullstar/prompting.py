@@ -22,6 +22,7 @@ LLM input payload schema (version 1.0):
       "lookback_days": int,
       "provider":      str | null,
       "model":         str | null,
+      "prompt":        str | null,   # packaged version name, "custom", or null
       "total_score":   int,
       "confidence":    "high" | "medium" | "low",
       "has_insights":  bool
@@ -315,6 +316,7 @@ def build_llm_input_payload(
     model: str | None,
     provider: str | None,
     mode: str = "ai",
+    prompt_name: str | None = None,
 ) -> dict:
     """
     Assemble a serializable LLM input payload.
@@ -327,6 +329,9 @@ def build_llm_input_payload(
     model         : resolved model name, or None for stub mode
     provider      : resolved provider name, or None for stub mode
     mode          : "ai" when a provider is configured, "stub" otherwise
+    prompt_name   : identity of the system prompt for provenance — a packaged
+                    version name like "brief_v1", "custom" for a filesystem
+                    path, or None when unknown
     """
     user_message = build_user_message(score, ingest)
 
@@ -346,6 +351,7 @@ def build_llm_input_payload(
             "lookback_days": score["lookback_days"],
             "provider":      provider,
             "model":         model,
+            "prompt":        prompt_name,
             "total_score":   score["total_score"],
             "confidence":    score["confidence"],
             "has_insights":  has_insights,

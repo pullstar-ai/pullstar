@@ -4,6 +4,8 @@ generate_brief.py — Local inference brief generator for PullStar 1-on-1
 Usage:
     python scripts/generate_brief.py --login jsmith --mode local
     python scripts/generate_brief.py --login jsmith --mode stub   # dev/demo only, no AI
+    python scripts/generate_brief.py --login jsmith --mode local --prompt brief_v2
+    python scripts/generate_brief.py --login jsmith --mode local --prompt ./my_prompt.txt
 
 Reads  .pullstar/score_{login}.json   (required)
 Reads  .pullstar/ingest_{login}.json  (optional)
@@ -42,7 +44,7 @@ if _REPO_ROOT not in sys.path:
 from dotenv import load_dotenv
 
 from pullstar.prompting import build_llm_input_payload, write_llm_input
-from pullstar.resources import load_brief_prompt
+from pullstar.resources import resolve_brief_prompt
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -582,6 +584,10 @@ def main() -> None:
     parser.add_argument("--output-dir",      default=".pullstar")
     parser.add_argument("--provider-config", default=None, metavar="PATH",
                         help="Path to model_provider.json (default: model_provider.json at repo root)")
+    parser.add_argument("--prompt", default=None, metavar="NAME_OR_PATH",
+                        help="Packaged prompt version (e.g. brief_v1, brief_v2) or a path "
+                             "to a prompt file. Default: brief_v1. A bare name prefers the "
+                             "packaged version; pass ./name.txt to force a local file.")
     args = parser.parse_args()
 
     # -- Agent mode: do not perform inference here ----------------------------
@@ -646,11 +652,19 @@ def main() -> None:
             )
         print(f"> Provider: {provider} / {model}  (temp={temperature}, max_tokens={max_tokens})")
 
+    # -- Resolve the system prompt (packaged version or a file) --------------
+    try:
+        brief_prompt = resolve_brief_prompt(args.prompt)
+    except FileNotFoundError as exc:
+        fail(str(exc))
+    print(f"> Prompt: {brief_prompt.name}")
+
     # -- Build canonical LLM input payload ------------------------------------
     # Always written for debugging and agent workflow parity.
     llm_input = build_llm_input_payload(
-        score, ingest, load_brief_prompt(),
+        score, ingest, brief_prompt.text,
         model=model, provider=provider, mode=args.mode,
+        prompt_name=brief_prompt.name,
     )
     llm_input_path = write_llm_input(llm_input, output_dir)
     print(f"> LLM input written to {llm_input_path}")
@@ -695,6 +709,7 @@ def main() -> None:
         "engineer_name":  (ingest or {}).get("engineer_name"),
         "org":            (ingest or {}).get("org", ""),
         "lookback_days":  score["lookback_days"],
+        "prompt":         brief_prompt.name,
         "scored_profile": score,
         "brief":          brief,
     }

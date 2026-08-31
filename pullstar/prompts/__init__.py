@@ -1,6 +1,11 @@
-"""Packaged prompt assets for the PullStar engine.
+"""Packaged, versioned system prompts for the PullStar brief.
 
-Files here are installed as package data and must be read through
-:mod:`importlib.resources` (see :mod:`pullstar.resources`) rather than by
-filesystem path, so they resolve correctly from an installed wheel.
+Each ``brief_v<N>.txt`` (or ``brief_<style>_v<N>.txt``) is one prompt version,
+shipped as package data. Select one on the CLI with ``--prompt brief_v2`` or
+via :func:`pullstar.resources.resolve_brief_prompt`. Read files here through
+:mod:`pullstar.resources`, never by filesystem path.
+
+Contributing a prompt: add a new ``.txt`` file here (do not edit an existing
+version in place — bump the version in the filename) and open a pull request.
+See ``pullstar/prompts/README.md``.
 """

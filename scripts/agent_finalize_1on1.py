@@ -129,6 +129,17 @@ def main() -> None:
 
     print(f"> Brief validated — {len(brief)} chars")
 
+    # -- Recover the prompt identity from the prepared llm_input, if present --
+    prompt_name: str | None = None
+    llm_input_path = input_dir / f"llm_input_{args.login}.json"
+    if llm_input_path.exists():
+        try:
+            prompt_name = json.loads(
+                llm_input_path.read_text(encoding="utf-8")
+            ).get("metadata", {}).get("prompt")
+        except (json.JSONDecodeError, AttributeError):
+            prompt_name = None
+
     # -- Write final output ---------------------------------------------------
     # brief comes exclusively from llm_output — always overwrites any prior file
     output = {
@@ -139,6 +150,7 @@ def main() -> None:
         "engineer_name":  (ingest or {}).get("engineer_name"),
         "org":            (ingest or {}).get("org", ""),
         "lookback_days":  score["lookback_days"],
+        "prompt":         prompt_name,
         "scored_profile": score,
         "brief":          brief,
     }

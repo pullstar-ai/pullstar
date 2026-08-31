@@ -48,6 +48,7 @@ def test_stub_pipeline_produces_brief(tmp_path) -> None:
     out = _pipeline(work)
     assert out["mode"] == "agent"
     assert out["brief"].strip()
+    assert out["prompt"] == "brief_v1"
     assert out["scored_profile"]["total_score"] == 76
 
 

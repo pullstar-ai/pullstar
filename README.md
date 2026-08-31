@@ -168,6 +168,28 @@ Writes:
 
 ---
 
+## Prompt versions
+
+The system prompt is versioned by filename under
+[`pullstar/prompts/`](pullstar/prompts/) and ships with the package. Pick one
+with `--prompt` (on `generate_brief.py` or `agent_prepare_1on1.py`):
+
+```bash
+python scripts/generate_brief.py --login jsmith --mode local --prompt brief_v2
+python scripts/generate_brief.py --login jsmith --mode local --prompt ./drafts/mine.txt
+```
+
+Default is `brief_v1`. A bare name selects the packaged version; pass a path
+(`./mine.txt`) to load a local file. The version used is recorded as
+`metadata.prompt` in `llm_input_{login}.json` and `prompt` in
+`output_{login}.json` (`"custom"` for a file path).
+
+**New prompts are welcome as pull requests** — add a `brief_*.txt` file (don't
+edit an existing version in place). See
+[`pullstar/prompts/README.md`](pullstar/prompts/README.md).
+
+---
+
 ## Agent Mode
 
 Use this mode when inference is performed by an external agent (e.g. OpenClaw or any custom workflow).

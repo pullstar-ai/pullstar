@@ -59,7 +59,7 @@ Repository = "https://github.com/pullstar-ai/pullstar"
 packages = ["pullstar", "pullstar.prompts"]
 
 [tool.setuptools.package-data]
-"pullstar.prompts" = ["*.txt"]
+"pullstar.prompts" = ["*.txt", "*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

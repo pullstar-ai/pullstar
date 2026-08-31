@@ -31,7 +31,7 @@ if _REPO_ROOT not in sys.path:
 from dotenv import load_dotenv
 
 from pullstar.prompting import build_llm_input_payload, write_llm_input
-from pullstar.resources import load_brief_prompt
+from pullstar.resources import resolve_brief_prompt
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -48,6 +48,9 @@ def main() -> None:
     parser.add_argument("--login",     required=True,    help="Engineer GitHub login")
     parser.add_argument("--input-dir", default=".pullstar", help="Directory containing score and ingest files")
     parser.add_argument("--mode",      default="default",   help="Preparation mode label stored in payload metadata (e.g. default, pr_insights)")
+    parser.add_argument("--prompt",    default=None, metavar="NAME_OR_PATH",
+                        help="Packaged prompt version (e.g. brief_v1, brief_v2) or a path to "
+                             "a prompt file. Default: brief_v1.")
     args = parser.parse_args()
 
     input_dir  = Path(args.input_dir)
@@ -76,17 +79,22 @@ def main() -> None:
     else:
         print("> No ingest file found — score data only")
 
-    # -- Load system prompt (packaged with pullstar) -------------------------
-    system_prompt = load_brief_prompt()
+    # -- Resolve the system prompt (packaged version or a file) -------------
+    try:
+        brief_prompt = resolve_brief_prompt(args.prompt)
+    except FileNotFoundError as exc:
+        fail(str(exc))
+    print(f"> Prompt: {brief_prompt.name}")
 
     # -- Build and write LLM input payload ------------------------------------
     payload = build_llm_input_payload(
-        score, ingest, system_prompt,
+        score, ingest, brief_prompt.text,
         model=None, provider=None, mode=args.mode,
+        prompt_name=brief_prompt.name,
     )
     out_path = write_llm_input(payload, output_dir)
     print(f"> LLM input written to {out_path}")
-    print(f"  mode={args.mode}  |  "
+    print(f"  mode={args.mode}  |  prompt={brief_prompt.name}  |  "
           f"has_insights={payload['metadata']['has_insights']}  |  "
           f"user message: {len(payload['user'])} chars")
 
