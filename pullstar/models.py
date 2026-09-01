@@ -128,3 +128,14 @@ class SkillOutput(TypedDict):
     lookback_days: int
     scored_profile: ScoredProfile
     brief: str              # full markdown brief from AI
+
+
+# ---------------------------------------------------------------------------
+# Supplemental context — generic extension block
+# ---------------------------------------------------------------------------
+# Consuming applications own how context is retrieved, selected, and persisted.
+# The engine only knows how to format supplied blocks into the prompt.
+
+class SupplementalContextBlock(TypedDict):
+    label: str    # section heading shown to the LLM (e.g. "Team Goals", "Sprint Notes")
+    content: str  # free-form text; whitespace-only blocks are silently skipped

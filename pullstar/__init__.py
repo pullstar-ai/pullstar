@@ -6,17 +6,28 @@ preparation brief.
 
 This package is the reusable analysis engine. Importing it is side-effect free:
 no network calls, no credential access, no filesystem artifacts, no UI. The
-CLI/Gradio application is a separate entrypoint (``app.py`` / ``scripts/``).
+legacy CLI/Gradio application is a separate entrypoint (``app.py`` / ``scripts/``).
 
     >>> import pullstar
     >>> pullstar.__version__
-    '0.1.0'
+    '0.2.0'
 
-Engine seams live in submodules and are imported explicitly by the caller:
+Supported engine API (v0.2.0):
 
-    from pullstar.scoring import score_velocity, score_pr_quality, ...
+    from pullstar.engine import prepare_1on1, finalize_1on1
+
+    prepared = prepare_1on1(developer_login, github_token=token,
+                            start_at=start, end_at=end)
+    completion = external_inference(prepared.inference.system_prompt,
+                                    prepared.inference.user_message)
+    result = finalize_1on1(prepared, completion)
+
+Lower-level seams (for advanced/direct use):
+
+    from pullstar.ingest import ingest_developer_activity
+    from pullstar.scoring import score_profile
     from pullstar.prompting import build_user_message, build_llm_input_payload
-    from pullstar.resources import load_brief_prompt
+    from pullstar.resources import resolve_brief_prompt, load_brief_prompt
 """
 
 from __future__ import annotations
@@ -26,7 +37,7 @@ from importlib import metadata as _metadata
 #: Semantic version of record. ``importlib.metadata`` is authoritative when the
 #: distribution is installed; this constant is the fallback for running straight
 #: from a source checkout (and must match ``[project].version`` in pyproject.toml).
-_FALLBACK_VERSION = "0.1.0"
+_FALLBACK_VERSION = "0.2.0"
 
 try:
     __version__ = _metadata.version("pullstar")

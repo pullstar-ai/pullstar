@@ -27,7 +27,7 @@ _PROBE = textwrap.dedent(
     import pullstar
     new = set(sys.modules) - before
 
-    assert pullstar.__version__ == "0.1.0", pullstar.__version__
+    assert pullstar.__version__ == "0.2.0", pullstar.__version__
 
     # No UI, no GitHub client, no LLM SDKs, no HTTP stack, no arg parsing.
     forbidden = {"gradio", "github", "anthropic", "openai", "requests",

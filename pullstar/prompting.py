@@ -6,7 +6,8 @@ Design philosophy:
   Bounds exist for stability and cost control, not to pre-summarize or filter content.
 
 Public API:
-  build_user_message(score, ingest)   — construct the user turn for the brief prompt
+  build_user_message(score, ingest, *, supplemental_context=None)
+                                      — construct the user turn for the brief prompt
   build_llm_input_payload(...)        — assemble a serializable LLM input artifact
   write_llm_input(payload, output_dir)— write payload to .pullstar/llm_input_{login}.json
 
@@ -238,12 +239,20 @@ def _build_pr_context_section(ingest: dict) -> str | None:
 # User message builder
 # ---------------------------------------------------------------------------
 
-def build_user_message(score: dict, ingest: dict | None) -> str:
+def build_user_message(
+    score: dict,
+    ingest: dict | None,
+    *,
+    supplemental_context: list[dict] | None = None,
+) -> str:
     """
     Construct the user turn for the brief prompt.
 
     In normal mode (no PR insights): includes dimension scores, raw stats, flags.
     In PR insights mode: also appends a PR Discussion Summary and PR Context block.
+    When supplemental_context is provided, non-empty blocks are appended as a
+    generic === SUPPLEMENTAL CONTEXT === section. Empty/whitespace-only blocks
+    are silently skipped. No source-specific branching.
     """
     login = score["engineer_login"]
     name  = (ingest or {}).get("engineer_name") or "no display name"
@@ -301,6 +310,16 @@ def build_user_message(score: dict, ingest: dict | None) -> str:
         if context_block:
             lines.append(f"\n{context_block}")
 
+    # Supplemental context: generic labeled blocks, empty ones silently dropped.
+    # No source-specific branching — labels and content are supplied by the caller.
+    if supplemental_context:
+        valid_blocks = [b for b in supplemental_context if b.get("content", "").strip()]
+        if valid_blocks:
+            lines.append("\n=== SUPPLEMENTAL CONTEXT ===")
+            for block in valid_blocks:
+                lines.append(f"\n[{block['label']}]")
+                lines.append(block["content"].strip())
+
     return "\n".join(lines)
 
 
@@ -317,28 +336,32 @@ def build_llm_input_payload(
     provider: str | None,
     mode: str = "ai",
     prompt_name: str | None = None,
+    supplemental_context: list[dict] | None = None,
 ) -> dict:
     """
     Assemble a serializable LLM input payload.
 
     Parameters
     ----------
-    score         : scored profile dict (from score_{login}.json)
-    ingest        : ingest profile dict or None
-    system_prompt : the loaded system prompt text
-    model         : resolved model name, or None for stub mode
-    provider      : resolved provider name, or None for stub mode
-    mode          : "ai" when a provider is configured, "stub" otherwise
-    prompt_name   : identity of the system prompt for provenance — a packaged
-                    version name like "brief_v1", "custom" for a filesystem
-                    path, or None when unknown
+    score                : scored profile dict (from score_{login}.json)
+    ingest               : ingest profile dict or None
+    system_prompt        : the loaded system prompt text
+    model                : resolved model name, or None for stub mode
+    provider             : resolved provider name, or None for stub mode
+    mode                 : "ai" when a provider is configured, "stub" otherwise
+    prompt_name          : identity of the system prompt for provenance — a packaged
+                           version name like "brief_v1", "custom" for a filesystem
+                           path, or None when unknown
+    supplemental_context : optional list of SupplementalContextBlock dicts;
+                           forwarded to build_user_message unchanged
     """
-    user_message = build_user_message(score, ingest)
+    user_message = build_user_message(score, ingest, supplemental_context=supplemental_context)
 
     has_insights = any(
         "discussion_summary_stats" in p
         for p in (ingest or {}).get("prs_authored", [])
     )
+    valid_ctx = [b for b in (supplemental_context or []) if b.get("content", "").strip()]
 
     return {
         "version":        "1.0",
@@ -347,14 +370,15 @@ def build_llm_input_payload(
         "system":         system_prompt,
         "user":           user_message,
         "metadata": {
-            "generated_at":  datetime.now(timezone.utc).isoformat(),
-            "lookback_days": score["lookback_days"],
-            "provider":      provider,
-            "model":         model,
-            "prompt":        prompt_name,
-            "total_score":   score["total_score"],
-            "confidence":    score["confidence"],
-            "has_insights":  has_insights,
+            "generated_at":              datetime.now(timezone.utc).isoformat(),
+            "lookback_days":             score["lookback_days"],
+            "provider":                  provider,
+            "model":                     model,
+            "prompt":                    prompt_name,
+            "total_score":               score["total_score"],
+            "confidence":                score["confidence"],
+            "has_insights":              has_insights,
+            "has_supplemental_context":  bool(valid_ctx),
         },
     }
 

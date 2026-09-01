@@ -52,32 +52,117 @@ cp model_provider.json.example model_provider.json
 
 ---
 
-## Use as a Python package
+## Engine API (v0.2.0 — supported)
 
-PullStar's analysis engine is packaged as `pullstar` (requires Python 3.11+):
+PullStar's analysis engine is packaged as `pullstar` (Python 3.11+).
+The engine prepares deterministic input for external inference; **the caller
+completely owns the inference step** — provider, model, credentials, and retries.
 
 ```bash
-pip install .          # engine only
-pip install ".[ui]"    # engine + Gradio demo (app.py)
+pip install pullstar          # engine only
+pip install "pullstar[ui]"    # engine + Gradio demo (app.py)
 ```
+
+### Quickstart
 
 ```python
-import pullstar
-pullstar.__version__            # -> "0.1.0"
+from datetime import datetime, timezone
+from pullstar.engine import prepare_1on1, finalize_1on1
 
-from pullstar.scoring import score_velocity, score_pr_quality        # deterministic scoring
-from pullstar.prompting import build_user_message, build_llm_input_payload
-from pullstar.resources import load_brief_prompt                     # packaged system prompt
+start = datetime(2026, 7, 1, tzinfo=timezone.utc)
+end   = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+# 1. Prepare — deterministic ingest → score → prompt assembly
+prepared = prepare_1on1(
+    "jsmith",
+    github_token="ghp_...",           # used only during ingest, never retained
+    repositories=["org/api", "org/frontend"],  # optional; None = all accessible
+    start_at=start,
+    end_at=end,
+    supplemental_context=[            # optional; engine does not interpret labels
+        {"label": "Current Expectations",
+         "content": "Take greater ownership of incident response."},
+    ],
+    # prompt_spec="brief_v1"          # override; default is brief_v2
+)
+
+# 2. Inference — caller's responsibility (any provider, model, or gateway)
+completion = your_llm_client.complete(
+    system=prepared.inference.system_prompt,
+    user=prepared.inference.user_message,
+)
+
+# 3. Finalize — validate and package the result
+result = finalize_1on1(prepared, completion)
+
+print(result.markdown)       # Markdown brief
+print(result.prompt_name)    # "brief_v2"
+print(result.metadata)       # finalized_at, engineer_login, total_score, confidence
 ```
 
-Importing `pullstar` is side-effect free: no network calls, no credential
-access, no files written, no UI launched. The `pullstar.*` package is pure
-standard library; the GitHub ingest and provider-backed brief steps live in
-`scripts/` and pull in the runtime dependencies above.
+### Key contracts
+
+| Contract | Detail |
+|---|---|
+| **Caller owns inference** | Engine does not call Anthropic, OpenAI, or any other provider. |
+| **Explicit repository scope** | `repositories=["org/a", "org/b"]` — no other repos leak in. |
+| **Exact UTC time window** | `start_at`/`end_at` passed unchanged to OSS-20 ingestion. |
+| **Generic supplemental context** | `SupplementalContextBlock` dicts — engine ignores label semantics. |
+| **Default prompt is brief_v2** | Engine default; pass `prompt_spec="brief_v1"` for reproducibility. |
+| **No `.pullstar` artifacts** | Full engine flow requires no filesystem artifacts. |
+| **No provider SDK required** | Engine imports only stdlib + requests + PyGithub. |
+| **GitHub token not retained** | Token used during ingest only; absent from all returned objects. |
+
+### PreparedInference fields
+
+`prepared.inference` is the small, transport-friendly object to pass to inference:
+
+| Field | Type | Description |
+|---|---|---|
+| `system_prompt` | `str` | Complete PullStar system prompt. |
+| `user_message` | `str` | Engineer-specific user turn with scores, stats, and context. |
+| `prompt_name` | `str` | Prompt identity for provenance (`"brief_v2"`, `"brief_v1"`, `"custom"`). |
+| `metadata` | `dict` | Credential-free metadata: `generated_at`, `lookback_days`, `total_score`, `confidence`, `has_insights`, `has_supplemental_context`. |
+
+### EngineResult fields
+
+| Field | Type | Description |
+|---|---|---|
+| `markdown` | `str` | Inference completion, strip()-normalized. |
+| `prompt_name` | `str` | Prompt provenance carried from preparation. |
+| `structured` | `None` | Reserved for future structured output. Always `None` in v0.2.0. |
+| `metadata` | `dict` | `finalized_at`, `engineer_login`, `total_score`, `confidence`. |
+
+### Lower-level seams
+
+For advanced use, lower-level APIs are also directly importable:
+
+```python
+from pullstar.ingest   import ingest_developer_activity
+from pullstar.scoring  import score_profile
+from pullstar.prompting import build_user_message, build_llm_input_payload
+from pullstar.resources import resolve_brief_prompt
+```
+
+Importing `pullstar` is side-effect free: no network calls, no credential reads,
+no files written, no UI launched.
+
+---
+
+## Legacy scripts (not supported for new integrations)
+
+> **Note:** `scripts/` contains legacy CLI wrappers for the Gradio demo.
+> New integrations should use the `pullstar.engine` API above.
+> The scripts are preserved for existing Gradio demo users and are not modified.
 
 ---
 
 ## Configuration
+
+> **Note:** This section covers configuration for the legacy Gradio demo
+> (`scripts/` + `app.py`).  The v0.2.0 engine API (`pullstar.engine`) does not
+> read `.env` or `model_provider.json` — it receives credentials as parameters
+> from the caller.  Provider API keys are **not** engine dependencies.
 
 ### Secrets — `.env`
 
@@ -87,11 +172,11 @@ standard library; the GitHub ingest and provider-backed brief steps live in
 | --- | --- | --- |
 | `GITHUB_TOKEN` | Recommended | Classic PAT with `repo` scope. Omit to use unauthenticated access (60 req/hr). |
 | `GITHUB_ORG` | No | Scope ingestion to one org. Omit to search all accessible repos. |
-| `ANTHROPIC_API_KEY` | If using anthropic | Anthropic API key |
-| `OPENAI_API_KEY` | If using openai | OpenAI API key |
-| `OPENROUTER_API_KEY` | If using openrouter | OpenRouter API key |
-| `TOGETHER_API_KEY` | If using together | Together AI API key |
-| `HUGGINGFACE_API_KEY` | If using huggingface | HuggingFace API key |
+| `ANTHROPIC_API_KEY` | Legacy scripts only | Anthropic API key (not used by the engine) |
+| `OPENAI_API_KEY` | Legacy scripts only | OpenAI API key (not used by the engine) |
+| `OPENROUTER_API_KEY` | Legacy scripts only | OpenRouter API key (not used by the engine) |
+| `TOGETHER_API_KEY` | Legacy scripts only | Together AI API key (not used by the engine) |
+| `HUGGINGFACE_API_KEY` | Legacy scripts only | HuggingFace API key (not used by the engine) |
 
 Provider/model settings do **not** belong in `.env`. Use `model_provider.json` for those.
 

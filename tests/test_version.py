@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib.metadata
 
-EXPECTED = "0.1.0"
+EXPECTED = "0.2.0"
 
 
 def test_dunder_version() -> None:

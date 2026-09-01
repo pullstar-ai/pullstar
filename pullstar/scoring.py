@@ -712,6 +712,85 @@ def score_consistency(prs: list, reviews: list, lookback_days: int, ingested_at:
 
 
 # ---------------------------------------------------------------------------
+# Complete profile assembly
+# ---------------------------------------------------------------------------
+
+def score_profile(ingest: dict) -> dict:
+    """
+    Score a complete IngestedProfile and return a ScoredProfile dict.
+
+    Runs all five dimensions, deduplicates flags by severity, assembles
+    overall confidence, and sets data_volume_note for thin-data cases.
+    Equivalent to the file-I/O-free body of the legacy scripts/score.py main().
+    """
+    prs     = ingest["prs_authored"]
+    reviews = ingest["reviews_given"]
+    stats   = ingest["summary_stats"]
+    lookback_days = ingest["lookback_days"]
+    ingested_at   = parse_dt(ingest["ingested_at"])
+
+    prs_with_insights = [p for p in prs if "discussion_summary_stats" in p]
+    ins_summary       = _insights_summary(prs_with_insights) if prs_with_insights else {}
+
+    velocity,             vel_flags    = score_velocity(prs, lookback_days, ingested_at)
+    pr_quality,           qual_flags   = score_pr_quality(prs, ins_summary)
+    review_participation, rev_flags    = score_review_participation(reviews, ins_summary)
+    collaboration,        collab_flags = score_collaboration(prs, reviews, ins_summary)
+    consistency,          cons_flags   = score_consistency(prs, reviews, lookback_days, ingested_at)
+
+    all_dims    = [velocity, pr_quality, review_participation, collaboration, consistency]
+    total_score = sum(d["score"] for d in all_dims)
+
+    raw_flags     = vel_flags + qual_flags + rev_flags + collab_flags + cons_flags
+    severity_rank = {"notable": 2, "caution": 1, "info": 0}
+    seen: set[str] = set()
+    deduped_flags: list[dict] = []
+    for flag in sorted(raw_flags, key=lambda f: severity_rank.get(f["severity"], 0), reverse=True):
+        if flag["message"] not in seen:
+            seen.add(flag["message"])
+            deduped_flags.append(flag)
+
+    n_prs = stats["total_prs_authored"]
+    if n_prs < 5:
+        overall_confidence = "low"
+        for d in all_dims:
+            d["confidence"] = "low"
+        data_volume_note: str | None = (
+            f"Only {n_prs} PR{'s' if n_prs != 1 else ''} in the {lookback_days}-day window "
+            f"— scores may not be representative."
+        )
+    else:
+        low_count    = sum(1 for d in all_dims if d["confidence"] == "low")
+        medium_count = sum(1 for d in all_dims if d["confidence"] == "medium")
+        if low_count >= 2:
+            overall_confidence = "low"
+        elif low_count == 1:
+            overall_confidence = "medium"
+        elif medium_count >= 2:
+            overall_confidence = "medium"
+        else:
+            overall_confidence = "high"
+        data_volume_note = None
+
+    return {
+        "engineer_login": ingest["engineer_login"],
+        "scored_at":      datetime.now(timezone.utc).isoformat(),
+        "lookback_days":  lookback_days,
+        "dimensions": {
+            "velocity":             velocity,
+            "pr_quality":           pr_quality,
+            "review_participation": review_participation,
+            "collaboration":        collaboration,
+            "consistency":          consistency,
+        },
+        "total_score":      total_score,
+        "confidence":       overall_confidence,
+        "data_volume_note": data_volume_note,
+        "flags":            deduped_flags,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
